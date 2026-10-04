@@ -44,18 +44,42 @@ function readBytes(data) {
 const call = (sel, ...args) => '0x' + SEL[sel] + args.map(word).join('');
 const callA = (sel, a) => '0x' + SEL[sel] + addrWord(a);
 
-async function rpc(method, params = []) {
-  let last;
-  for (const url of PLATFORM.rpcs) {
-    try {
-      const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }), signal: AbortSignal.timeout(9000) });
-      const body = await res.json();
-      if (body.error) throw new Error(body.error.message || 'RPC error');
-      return body.result;
-    } catch (e) { last = e; }
+// Public RPCs rate-limit bursts, so keep a few requests in flight and retry with backoff.
+const MAX_IN_FLIGHT = 4;
+let inFlight = 0;
+const waiting = [];
+async function slot() {
+  if (inFlight < MAX_IN_FLIGHT) { inFlight++; return; }
+  await new Promise((resolve) => waiting.push(resolve));
+  inFlight++;
+}
+function release() { inFlight--; waiting.shift()?.(); }
+
+async function rpcOnce(url, method, params) {
+  const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }), signal: AbortSignal.timeout(12000) });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const body = await res.json();
+  if (body.error) {
+    const e = new Error(body.error.message || 'RPC error');
+    e.revert = /revert|execution/i.test(e.message); // a contract answer, not a server problem
+    throw e;
   }
-  throw new Error(`X Layer RPC unavailable (${last?.message ?? 'unknown'}).`);
+  return body.result;
+}
+async function rpc(method, params = []) {
+  await slot();
+  try {
+    let last;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      for (const url of PLATFORM.rpcs) {
+        try { return await rpcOnce(url, method, params); }
+        catch (e) { if (e.revert) throw e; last = e; }
+      }
+      await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
+    }
+    throw new Error(`X Layer RPC unavailable (${last?.message ?? 'unknown'}).`);
+  } finally { release(); }
 }
 const ethCall = (to, data, block = 'latest') => rpc('eth_call', [{ to: addr(to), data }, block]);
 const uintAt = async (to, sel, ...a) => readWord(await ethCall(to, call(sel, ...a)));

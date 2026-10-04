@@ -28,12 +28,16 @@ export function decode(netlistHex, nIn) {
     if (op === OP_NAND) {
       if (p + 6 > bytes.length) throw new Error('Truncated NAND.');
       const a = u24(), b = u24();
-      if (a >= next || b >= next) throw new Error(`NAND reads a later signal (${a}, ${b}).`);
       elements.push({ op, a, b, out: next++ });
     } else if (op === OP_LATCH) {
       if (p + 3 > bytes.length) throw new Error('Truncated LATCH.');
       elements.push({ op, d: u24(), out: next++ });
     } else throw new Error(`Unknown opcode ${op}.`);
+  }
+  const total = next;
+  for (const e of elements) {
+    const refs = e.op === OP_NAND ? [e.a, e.b] : [e.d];
+    if (refs.some((r) => r >= total)) throw new Error('Netlist references a missing signal.');
   }
   return elements;
 }

@@ -7,7 +7,7 @@ const $ = (id) => document.getElementById(id);
 const short = (a) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const params = new URLSearchParams(location.search);
-let processor = params.get('p') || CONFIG.PROCESSOR || CONFIG.REFERENCE_PROCESSOR;
+let processor = params.get('p') || CONFIG.PROCESSOR || null; // null = not launched yet: show examples
 let current = null; // circuit shown in detail view
 let account = null;
 
@@ -20,7 +20,7 @@ function show(tab) {
   scrollTo(0, 0);
 }
 document.querySelectorAll('nav button').forEach((b) => b.onclick = () => { show(b.dataset.tab); if (b.dataset.tab === 'studio') updateStudio(); });
-$('back').onclick = () => { history.replaceState(null, '', `?p=${processor}`); show('gallery'); };
+$('back').onclick = () => { history.replaceState(null, '', processor ? `?p=${processor}` : './'); show('gallery'); };
 
 $('connect').onclick = async () => {
   try { account = await chain.connect(); $('connect').textContent = short(account); updateQuote(); }
@@ -30,8 +30,10 @@ $('connect').onclick = async () => {
 // ---------- gallery ----------
 async function loadGallery() {
   const card = $('cpu-card'), grid = $('gallery');
-  grid.innerHTML = ''; card.innerHTML = '<div class="muted">Reading processor from X Layer…</div>';
-  $('foot-cpu').textContent = short(processor); $('foot-cpu').href = chain.explorerAddr(processor);
+  grid.innerHTML = '';
+  if (!processor) return showExamples();
+  card.innerHTML = '<div class="muted">Reading processor from X Layer…</div>';
+  $('foot-cpu').textContent = '· ' + short(processor); $('foot-cpu').href = chain.explorerAddr(processor);
   try {
     const cpu = await chain.readProcessor(processor);
     const isOurs = CONFIG.PROCESSOR && processor.toLowerCase() === CONFIG.PROCESSOR.toLowerCase();
@@ -42,7 +44,7 @@ async function loadGallery() {
       <div><span>Transistors sold</span><b>${cpu.minted.toLocaleString()} / ${cpu.supplyCap.toLocaleString()}</b></div>
       <div><span>Price</span><b>${chain.fmt(cpu.mintPrice)} OKB</b></div>
       <div><span>Creator earned</span><b>${chain.fmt(earned, 4)} OKB</b></div>
-      ${isOurs ? '' : '<div class="muted" style="flex-basis:100%">Showing another TapeOut processor. Ọnà renders any circuit on X Layer.</div>'}`;
+      ${isOurs ? '' : `<div class="muted" style="flex-basis:100%">You're viewing another TapeOut processor as art. <a href="./">Back to ${esc(CONFIG.NAME)}</a></div>`}`;
     if (!cpu.circuitCount) { grid.innerHTML = '<p class="muted">No circuits yet. Make the first one in the Studio.</p>'; return; }
     const ids = Array.from({ length: Math.min(cpu.circuitCount, 48) }, (_, i) => cpu.circuitCount - i);
     for (const id of ids) {
@@ -54,10 +56,30 @@ async function loadGallery() {
         const t = render(el.querySelector('canvas'), c, { circuitId: id, processor, title: `${cpu.name} #${id}` });
         el.querySelector('.g').textContent = `${t.gates} NAND · ${t.style}`;
         el.onclick = () => openDetail(c, cpu);
-      }).catch((e) => { el.querySelector('.g').textContent = 'unreadable'; console.warn(id, e); });
+      }).catch((e) => {
+        el.querySelector('.g').textContent = 'could not load';
+        el.title = e.message;
+        el.querySelector('canvas').replaceWith(Object.assign(document.createElement('p'), { className: 'card-err', textContent: e.message }));
+        console.warn(id, e);
+      });
     }
   } catch (e) {
     card.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+  }
+}
+function showExamples() {
+  $('cpu-card').innerHTML = `<div style="flex-basis:100%"><span>Coming soon</span><b>The ${esc(CONFIG.NAME)} processor launches on X Layer shortly.</b></div>
+    <div class="muted" style="flex-basis:100%">These are example pieces. Tap one to open it in the Studio.</div>`;
+  const grid = $('gallery');
+  const examples = [['Sierpinski', 5], ['Moiré', 5], ['Weave', 4], ['Lattice', 5], ['Carpet', 5], ['Sierpinski', 6], ['Moiré', 6], ['Lattice', 4]];
+  for (const [name, bits] of examples) {
+    const c = compile(PRESETS[name](bits), bits);
+    const el = document.createElement('div');
+    el.className = 'card';
+    el.innerHTML = `<canvas width="1080" height="1080"></canvas><div><span>${esc(name)}</span><span>${c.gateCount} NAND</span></div>`;
+    grid.append(el);
+    render(el.querySelector('canvas'), c, { title: name, circuitId: `${name}-${bits}` });
+    el.onclick = () => { $('preset').value = name; $('bits').value = String(bits); applyPreset(); show('studio'); };
   }
 }
 $('any-go').onclick = () => {
@@ -181,7 +203,7 @@ $('l-go').onclick = async () => {
 // ---------- boot ----------
 applyPreset();
 loadGallery();
-if (params.get('c')) {
+if (processor && params.get('c')) {
   Promise.all([chain.readCircuit(processor, params.get('c')), chain.readProcessor(processor)])
     .then(([c, cpu]) => openDetail(c, cpu)).catch((e) => console.warn(e));
 }

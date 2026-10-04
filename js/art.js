@@ -84,14 +84,17 @@ export function render(canvas, circuit, meta = {}) {
   drawPins(ctx, 'right', circuit.nOut, pad, inner);
 
   // Cells
-  const cw = inner / grid.w, ch = inner / grid.h;
+  // Square cells, centred, so tiny circuits (e.g. 2×1) still look deliberate.
+  const cell = Math.min(inner / grid.w, inner / grid.h);
+  const cw = cell, ch = cell;
+  const ox = pad + (inner - cell * grid.w) / 2, oy = pad + (inner - cell * grid.h) / 2;
   const counts = new Array(levels).fill(0);
   for (let y = 0; y < grid.h; y++) for (let x = 0; x < grid.w; x++) {
     const v = value(grid.cells[y * grid.w + x]);
     counts[v]++;
     if (v === 0) continue;
     ctx.fillStyle = pal.colors[v];
-    const px = pad + x * cw, py = pad + y * ch;
+    const px = ox + x * cw, py = oy + y * ch;
     const g = Math.min(cw, ch);
     if (style === 'Tiles') { roundRect(ctx, px + g * 0.08, py + g * 0.08, cw * 0.84, ch * 0.84, g * 0.18); ctx.fill(); }
     else if (style === 'Dots') { ctx.beginPath(); ctx.arc(px + cw / 2, py + ch / 2, g * (0.22 + 0.24 * v / (levels - 1)), 0, Math.PI * 2); ctx.fill(); }
