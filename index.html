@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ọnà · Circuit art on X Layer</title>
+<meta name="description" content="Every TapeOut circuit on X Layer is a unique artwork, drawn from its own logic. Design one, tape it out, own it.">
+<meta property="og:title" content="Ọnà · Circuit art on X Layer">
+<meta property="og:description" content="On-chain logic you can see. Every TapeOut circuit on X Layer becomes a unique artwork.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%23111'/><rect x='3' y='3' width='4' height='4' fill='%23ff4fa3'/><rect x='9' y='9' width='4' height='4' fill='%2350e3c2'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="./"><span class="logo"></span><span id="brand-name">Ọnà</span></a>
+  <nav>
+    <button data-tab="gallery" class="on">Gallery</button>
+    <button data-tab="studio">Studio</button>
+    <button data-tab="about">How it works</button>
+  </nav>
+  <button id="connect" class="ghost">Connect wallet</button>
+</header>
+
+<main>
+  <!-- GALLERY -->
+  <section id="tab-gallery" class="tab on">
+    <div class="hero">
+      <h1>On-chain logic you can see.</h1>
+      <p>Every circuit taped out on TapeOut is a tiny program made of NAND gates. Ọnà runs that program for every possible input and paints the answers. Same logic, same picture, forever. Nobody can fake one.</p>
+    </div>
+    <div class="cpu-card" id="cpu-card"><div class="muted">Loading processor…</div></div>
+    <div class="load-any">
+      <input id="any-cpu" placeholder="View any TapeOut processor on X Layer (0x…)" spellcheck="false">
+      <button id="any-go" class="ghost">View</button>
+    </div>
+    <div class="grid" id="gallery"></div>
+  </section>
+
+  <!-- DETAIL -->
+  <section id="tab-detail" class="tab">
+    <button class="back ghost" id="back">← Gallery</button>
+    <div class="detail">
+      <canvas id="big" width="1080" height="1080"></canvas>
+      <aside>
+        <h2 id="d-title">Circuit</h2>
+        <dl id="d-traits"></dl>
+        <div class="actions">
+          <button id="d-verify">Verify on X Layer</button>
+          <button id="d-download" class="ghost">Download PNG</button>
+          <button id="d-share" class="ghost">Share on X</button>
+        </div>
+        <p id="d-verify-out" class="note"></p>
+      </aside>
+    </div>
+  </section>
+
+  <!-- STUDIO -->
+  <section id="tab-studio" class="tab">
+    <div class="studio">
+      <div class="canvas-wrap"><canvas id="preview" width="1080" height="1080"></canvas></div>
+      <div class="controls">
+        <h2>Design a circuit</h2>
+        <p class="muted">Each cell is one input: <code>x0…</code> are the column's bits, <code>y0…</code> the row's. Write up to three rules with <code>&amp;</code> <code>|</code> <code>^</code> <code>~</code>. Each rule is one colour layer.</p>
+        <label>Start from <select id="preset"></select></label>
+        <label>Canvas <select id="bits"><option value="4">16 × 16</option><option value="5" selected>32 × 32</option><option value="6">64 × 64</option></select></label>
+        <label>Layer 1 <input id="e0" spellcheck="false"></label>
+        <label>Layer 2 <input id="e1" spellcheck="false" placeholder="optional"></label>
+        <label>Layer 3 <input id="e2" spellcheck="false" placeholder="optional"></label>
+        <label>Title <input id="title" maxlength="40" placeholder="Name your piece"></label>
+        <p id="s-error" class="error"></p>
+        <div class="stats" id="s-stats"></div>
+        <div class="quote" id="s-quote"></div>
+        <button id="s-mint" class="primary">Mint &amp; tape out</button>
+        <p id="s-status" class="note"></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ABOUT -->
+  <section id="tab-about" class="tab prose">
+    <h2>How it works</h2>
+    <ol>
+      <li><b>A circuit is a program.</b> On <a href="https://tapeout.net" target="_blank" rel="noopener">TapeOut</a>, circuits are built from NAND gates and stored on X Layer as NFTs. Each gate costs one NAND transistor, which is burned when the circuit is taped out.</li>
+      <li><b>The art is the truth table.</b> Ọnà reads the circuit's netlist from chain, evaluates it for every input, and draws one cell per input. The colours, style and palette come from a hash of the netlist, so the picture can't be changed or faked.</li>
+      <li><b>Anyone can check it.</b> “Verify on X Layer” asks the processor contract to evaluate sample inputs with a free <code>eth_call</code> and compares them with the picture.</li>
+      <li><b>Making art buys transistors.</b> Pieces made in the Studio are taped out on the Ọnà processor. Your wallet buys exactly as many NAND transistors as your design uses; that payment goes to the processor's creator.</li>
+    </ol>
+    <p class="muted">TapeOut's X Layer contracts are new and not independently audited. Every transaction is shown in your wallet before you sign. Nothing here is investment advice.</p>
+    <details id="launch-panel">
+      <summary>Processor owner: launch a processor</summary>
+      <p class="warn">Supply and price are permanent once launched.</p>
+      <label>Name <input id="l-name" value="Ọnà"></label>
+      <label>Symbol <input id="l-symbol" value="ONA"></label>
+      <label>Story <input id="l-story" value="Every circuit is an artwork drawn from its own logic."></label>
+      <label>Total transistors <input id="l-supply" value="1000000"></label>
+      <label>Price per transistor (OKB) <input id="l-price" value="0.0001"></label>
+      <button id="l-go" class="primary">Launch processor</button>
+      <p id="l-status" class="note"></p>
+    </details>
+  </section>
+</main>
+<footer>Built on <a href="https://tapeout.net" target="_blank" rel="noopener">TapeOut</a> · X Layer · <a id="foot-cpu" target="_blank" rel="noopener"></a></footer>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
