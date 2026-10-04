@@ -61,7 +61,7 @@ const STYLES = ['Tiles', 'Dots', 'Weave', 'Pixels'];
  */
 export function render(canvas, circuit, meta = {}) {
   const grid = truthGrid(circuit);
-  const seed = hash32(circuit.netlistHex + ':' + (meta.circuitId ?? ''));
+  const seed = hash32(circuit.netlistHex + ':' + (meta.seedKey ?? meta.circuitId ?? ''));
   const pal = palette(seed, circuit.nOut);
   const style = STYLES[seed % STYLES.length];
   const size = canvas.width = canvas.height = 1080;

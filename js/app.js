@@ -78,7 +78,7 @@ function showExamples() {
     el.className = 'card';
     el.innerHTML = `<canvas width="1080" height="1080"></canvas><div><span>${esc(name)}</span><span>${c.gateCount} NAND</span></div>`;
     grid.append(el);
-    render(el.querySelector('canvas'), c, { title: name, circuitId: `${name}-${bits}` });
+    render(el.querySelector('canvas'), c, { title: name, seedKey: `${name}-${bits}` });
     el.onclick = () => { $('preset').value = name; $('bits').value = String(bits); applyPreset(); show('studio'); };
   }
 }
