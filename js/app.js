@@ -1,7 +1,7 @@
-import { CONFIG } from '../config.js?v=9';
-import { compile } from './netlist.js?v=9';
-import { render, truthGrid } from './art.js?v=9';
-import * as chain from './chain.js?v=9';
+import { CONFIG } from '../config.js?v=10';
+import { compile, netlistToExprs } from './netlist.js?v=10';
+import { render, truthGrid, hash32 } from './art.js?v=10';
+import * as chain from './chain.js?v=10';
 
 const $ = (id) => document.getElementById(id);
 const short = (a) => `${a.slice(0, 6)}…${a.slice(-4)}`;
@@ -15,13 +15,18 @@ let cpuInfo = null; // the gallery processor, once read
 // ---------- theme ----------
 const theme = () => 'light'; // dark mode comes later; its colours are already in style.css
 const painted = new Set(); // every canvas we draw, so a theme switch can repaint it
+let frame = 0; // animation frame for moving pieces
 function paint(canvas, circuit, meta) {
   painted.add(canvas);
   canvas._art = { circuit, meta };
-  return render(canvas, circuit, { ...meta, theme: theme() });
+  return (canvas._traits = render(canvas, circuit, { ...meta, theme: theme(), frame }));
 }
-function repaintAll() {
-  for (const c of painted) if (c.isConnected) render(c, c._art.circuit, { ...c._art.meta, theme: theme() }); else painted.delete(c);
+function repaintAll(movingOnly = false) {
+  for (const c of painted) {
+    if (!c.isConnected) { painted.delete(c); continue; }
+    if (movingOnly && !c._art.circuit.timeBits) continue;
+    c._traits = render(c, c._art.circuit, { ...c._art.meta, theme: theme(), frame });
+  }
 }
 document.fonts?.ready.then(repaintAll); // canvas captions use Geist; redraw once it has loaded
 
@@ -67,22 +72,29 @@ const PRESETS = {
   'Carpet': (b) => [range(b).map((i) => `(x${i}&y${i})`).join(' | '), `x${b - 1}^y${b - 2}`],
   'Kente': (b) => [`x${b - 1}^y${b - 2}`, `(x1^y1)&x${b - 2}`, `y0&~x0`],
 };
-const design = (name, bits) => compile(PRESETS[name](bits), bits);
+// Motion: each layer also flips with the time inputs t0–t2, so every frame (t = 0…7) is a different picture.
+const TIME_BITS = 3;
+const withMotion = (exprs, b) => exprs.map((e, k) =>
+  `(${e}) ^ (t${k % 3} & x${b - 1}) ^ (t${(k + 1) % 3} & y${b - 1}) ^ (t${(k + 2) % 3} & x${Math.max(0, b - 2)})`);
+const design = (name, bits, tb = 0) => compile(tb ? withMotion(PRESETS[name](bits), bits) : PRESETS[name](bits), bits, tb);
+// Circuits read from the Ọnà processor with an odd input count are moving pieces (3 time inputs).
+const withTime = (c) => ({ ...c, timeBits: CONFIG.PROCESSOR && c.processor?.toLowerCase() === CONFIG.PROCESSOR.toLowerCase()
+  && c.nIn % 2 === 1 && c.nIn >= 2 * 2 + TIME_BITS ? TIME_BITS : 0 });
 
 /** Random but pleasing rules: mostly high bits for bold shapes, some low bits for texture. */
-function surprise(bits) {
-  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
-  const hi = () => Math.max(0, bits - 1 - Math.floor(Math.random() * Math.min(3, bits)));
-  const any = () => Math.floor(Math.random() * bits);
+function surprise(bits, rand = Math.random) {
+  const pick = (arr) => arr[Math.floor(rand() * arr.length)];
+  const hi = () => Math.max(0, bits - 1 - Math.floor(rand() * Math.min(3, bits)));
+  const any = () => Math.floor(rand() * bits);
   const term = () => pick([
     () => `x${hi()}^y${hi()}`, () => `x${any()}&y${any()}`, () => `~(x${hi()}|y${any()})`,
     () => `(x${any()}^y${hi()})&x${hi()}`, () => `x${hi()}^y${any()}^x${any()}`,
   ])();
   for (let attempt = 0; attempt < 30; attempt++) {
-    const layers = 1 + Math.floor(Math.random() * 3);
+    const layers = 1 + Math.floor(rand() * 3);
     const exprs = range(layers).map(() => {
       let e = term();
-      const extra = Math.floor(Math.random() * 2);
+      const extra = Math.floor(rand() * 2);
       for (let k = 0; k < extra; k++) e = `(${e}) ${pick(['^', '&', '|'])} (${term()})`;
       return e;
     });
@@ -95,6 +107,38 @@ function surprise(bits) {
 }
 
 const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// ---------- moving pieces ----------
+// Every moving piece steps through its 8 frames together. Each frame is the same circuit with a different time input.
+if (!calm) setInterval(() => { if (document.hidden) return; frame = (frame + 1) % 2 ** TIME_BITS; repaintAll(true); }, 650);
+
+// ---------- tap a tile ----------
+// Map a tap back to its cell and say which question that tile asked the circuit, and what it answered.
+let tipTimer = null;
+function inspect(e) {
+  const cv = e.currentTarget, g = cv._traits?.geo;
+  if (!g) return;
+  const r = cv.getBoundingClientRect(), k = 1080 / r.width;
+  const px = (e.clientX - r.left) * k, py = (e.clientY - r.top) * k;
+  const col = Math.floor((px - g.ox) / g.cell), row = Math.floor((py - g.oy) / g.cell);
+  const tip = $('tip');
+  if (col < 0 || row < 0 || col >= g.w || row >= g.h) { tip.hidden = true; return; }
+  const v = g.cells[row * g.w + col];
+  const answer = range(g.nOut).map((i) => (v >> i) & 1).join(' ');
+  const moving = cv._traits.frames > 1;
+  // read the colour straight off the canvas so the swatch is exactly what the tile shows
+  const ctx = cv.getContext('2d'), s = cv.width / 1080;
+  const [cr, cg, cb] = ctx.getImageData(Math.floor((g.ox + (col + 0.5) * g.cell) * s), Math.floor((g.oy + (row + 0.5) * g.cell) * s), 1, 1).data;
+  tip.innerHTML = `This tile asks the circuit: column <b>${col}</b>, row <b>${row}</b>${moving ? `, time <b>${g.extra}</b>` : ''}.<br>
+    It answered <b>${answer}</b>${g.nOut > 1 ? ' (one bit per colour layer)' : ''}${v ? `, which paints this colour <span class="sw" style="background:rgb(${cr},${cg},${cb})"></span>` : ', so the tile stays empty'}.`;
+  tip.hidden = false;
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  tip.style.left = Math.max(8, Math.min(innerWidth - w - 8, e.clientX - w / 2)) + 'px';
+  tip.style.top = (e.clientY - h - 14 < 8 ? e.clientY + 18 : e.clientY - h - 14) + 'px';
+  clearTimeout(tipTimer); tipTimer = setTimeout(() => { tip.hidden = true; }, 4500);
+}
+document.querySelectorAll('canvas.inspect').forEach((c) => c.addEventListener('click', inspect));
+addEventListener('scroll', () => { $('tip').hidden = true; }, { passive: true });
 
 // ---------- how it works: four boxes that stack as you scroll ----------
 {
@@ -221,7 +265,7 @@ async function loadGallery() {
     if (!cpu.circuitCount) { $('gallery').innerHTML = '<p class="muted">No artworks yet. Be the first in the Studio.</p>'; return; }
     for (const id of range(Math.min(cpu.circuitCount, 48)).map((i) => cpu.circuitCount - i)) {
       const el = card({ title: `${cpu.name || 'Circuit'} #${id}`, sub: 'Loading…' });
-      chain.readCircuit(processor, id).then((c) => {
+      chain.readCircuit(processor, id).then(withTime).then((c) => {
         const t = paint(el.querySelector('canvas'), c, { bare: true, size: 480, circuitId: id });
         el.querySelector('.sub').textContent = `${short(c.owner)} · ${t.gates} NAND`;
         el.onclick = () => openDetail(c, cpu);
@@ -236,10 +280,11 @@ function showExamples() {
   $('gallery-title').textContent = 'Example pieces';
   $('cpu-card').innerHTML = `<div style="flex-basis:100%"><span>Coming soon</span><b>The ${esc(CONFIG.NAME)} processor launches on X Layer shortly.</b></div>
     <div class="muted" style="flex-basis:100%">These pieces are previews. Tap one to make it yours in the Studio.</div>`;
-  const examples = [['Sierpinski', 5], ['Moiré', 5], ['Kente', 5], ['Weave', 4], ['Lattice', 5], ['Carpet', 5], ['Sierpinski', 6], ['Kente', 6]];
-  for (const [name, bits] of examples) {
-    const c = design(name, bits);
-    const el = card({ title: name, sub: `${c.gateCount} NAND`, right: 'Preview', onClick: () => { selectPreset(name, bits); show('studio'); } });
+  const examples = [['Sierpinski', 5], ['Moiré', 5, 1], ['Kente', 5], ['Weave', 4], ['Lattice', 5, 1], ['Carpet', 5], ['Sierpinski', 6], ['Kente', 6, 1]];
+  for (const [name, bits, moving] of examples) {
+    const c = design(name, bits, moving ? TIME_BITS : 0);
+    const el = card({ title: name, sub: `${c.gateCount} NAND${moving ? ' · moving' : ''}`, right: 'Preview',
+      onClick: () => { setMotion(moving ? TIME_BITS : 0); selectPreset(name, bits); show('studio'); } });
     paint(el.querySelector('canvas'), c, { bare: true, size: 480 });
   }
 }
@@ -260,27 +305,32 @@ function openDetail(c, cpu) {
     ['Size', `${t.gates} NAND${t.latches ? ` + ${t.latches} LATCH` : ''}`], ['Inputs → outputs', `${c.nIn} → ${c.nOut}`],
     ['Canvas', t.grid + (t.inputsFixed ? ` (${t.inputsFixed} inputs fixed)` : '')], ['Style', t.style], ['Palette', `${t.palette}, ${t.colors} colours`],
     ['Lit cells', t.density], ['Processor', `<a href="${chain.explorerAddr(c.processor)}" target="_blank" rel="noopener">${short(c.processor)}</a>`]];
+  if (t.frames > 1) rows.push(['Motion', `${t.frames} frames, one per value of time`]);
   if (t.stateful) rows.push(['Memory', 'Has latches; state carries cell to cell']);
   $('d-traits').innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
   $('d-verify-out').textContent = '';
   $('d-verify').disabled = t.stateful;
+  remixFrom = netlistToExprs(c);
+  $('d-remix').hidden = !remixFrom;
   show('detail');
 }
 $('d-verify').onclick = async () => {
   const c = current; const out = $('d-verify-out');
   out.textContent = 'Asking the processor contract…';
   try {
-    const grid = truthGrid(c);
+    const grid = truthGrid(c, frame); // for a moving piece, check the frame on screen
     const block = await chain.blockNumber();
     const total = grid.w * grid.h;
     const picks = [0, total - 1, ...range(6).map((i) => Math.floor(((i + 1) * total) / 7))];
     let ok = 0;
-    for (const input of picks) {
+    for (const cell of picks) {
+      const input = cell + grid.extra * total; // inputs beyond the grid (time, or fixed extras) sit above x and y
       const got = await chain.evalOnChain(c.processor, c.id, c.nIn, c.nOut, input, '0x' + block.toString(16));
-      if (got === grid.cells[input]) ok++;
+      if (got === grid.cells[cell]) ok++;
     }
+    const at = grid.frames > 1 ? ` (frame ${grid.extra + 1} of ${grid.frames})` : '';
     out.textContent = ok === picks.length
-      ? `✓ ${ok}/${picks.length} sample cells match the contract's own answers at block ${block.toLocaleString()}.`
+      ? `✓ ${ok}/${picks.length} sample cells${at} match the contract's own answers at block ${block.toLocaleString()}.`
       : `✗ Only ${ok}/${picks.length} cells matched at block ${block}. Please report this circuit.`;
   } catch (e) { out.textContent = e.message; }
 };
@@ -294,8 +344,25 @@ $('d-share').onclick = () => {
   open(`https://x.com/intent/post?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`, '_blank', 'noopener');
 };
 
+$('d-remix').onclick = () => {
+  if (!remixFrom) return;
+  presetName = null; source = 'remix';
+  bits = remixFrom.bits; setMotion(remixFrom.timeBits ? TIME_BITS : 0, false);
+  document.querySelectorAll('#bits button').forEach((x) => x.classList.toggle('on', Number(x.dataset.bits) === bits));
+  setExprs(remixFrom.exprs);
+  $('title').value = `Remix of ${$('d-title').textContent}`.slice(0, 40); delete $('title').dataset.auto;
+  document.querySelector('.advanced').open = true;
+  document.querySelectorAll('.chip').forEach((c) => c.classList.remove('on'));
+  history.replaceState(null, '', processor && processor !== CONFIG.PROCESSOR ? `?p=${processor}` : './');
+  updateStudio(); show('studio');
+};
+
 // ---------- studio ----------
 let bits = 5, presetName = 'Sierpinski', studioDesign = null;
+let timeBits = 0;            // 0 = still, TIME_BITS = moving
+let source = 'preset';       // where the rules came from: preset | surprise | wallet | remix | typed
+let baseExprs = null;        // rules before motion is added (preset, surprise, wallet)
+let remixFrom = null;        // rules recovered from the piece open in the detail view
 function buildChips() {
   const box = $('patterns'); box.innerHTML = '';
   for (const name of Object.keys(PRESETS)) {
@@ -304,36 +371,65 @@ function buildChips() {
     b.innerHTML = `<canvas width="160" height="160"></canvas><span>${esc(name)}</span>`;
     b.onclick = () => selectPreset(name, bits);
     box.append(b);
-    paint(b.querySelector('canvas'), design(name, bits), { bare: true, size: 160 });
+    paint(b.querySelector('canvas'), design(name, bits, timeBits), { bare: true, size: 160 });
   }
 }
 function setExprs(exprs) { ['e0', 'e1', 'e2'].forEach((id, i) => { $(id).value = exprs[i] || ''; }); }
-function selectPreset(name, b = bits) {
-  presetName = name; bits = b;
-  document.querySelectorAll('#bits button').forEach((x) => x.classList.toggle('on', Number(x.dataset.bits) === bits));
-  setExprs(PRESETS[name](bits));
-  if (!$('title').value || $('title').dataset.auto) { $('title').value = name; $('title').dataset.auto = '1'; }
+const applyBase = () => setExprs(timeBits ? withMotion(baseExprs, bits) : baseExprs);
+function setMotion(tb, rebuild = true) {
+  timeBits = tb;
+  document.querySelectorAll('#motion button').forEach((x) => x.classList.toggle('on', Number(x.dataset.m) === (tb ? 1 : 0)));
+  if (!rebuild) return;
+  if (baseExprs && source !== 'remix' && source !== 'typed') applyBase();
   buildChips(); updateStudio();
 }
+document.querySelectorAll('#motion button').forEach((b) => b.onclick = () => setMotion(b.dataset.m === '1' ? TIME_BITS : 0));
+function setAutoTitle(t) { if (!$('title').value || $('title').dataset.auto) { $('title').value = t; $('title').dataset.auto = '1'; } }
+function selectPreset(name, b = bits) {
+  presetName = name; bits = b; source = 'preset';
+  document.querySelectorAll('#bits button').forEach((x) => x.classList.toggle('on', Number(x.dataset.bits) === bits));
+  baseExprs = PRESETS[name](bits); applyBase();
+  setAutoTitle(name);
+  buildChips(); updateStudio();
+}
+// A wallet always gets the same rules: its address seeds the random choices.
+function walletRand(addr) {
+  let seed = hash32(addr.toLowerCase());
+  return () => { seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+function fromWallet() {
+  presetName = null; source = 'wallet';
+  baseExprs = surprise(bits, walletRand(account)); applyBase();
+  $('title').value = short(account); $('title').dataset.auto = '1';
+  document.querySelectorAll('.chip').forEach((c) => c.classList.remove('on'));
+  updateStudio();
+}
+$('from-wallet').onclick = async () => {
+  try { if (!account) { account = await chain.connect(); $('connect').textContent = short(account); } fromWallet(); }
+  catch (e) { $('s-error').textContent = e.message; }
+};
 document.querySelectorAll('#bits button').forEach((b) => b.onclick = () => {
   bits = Number(b.dataset.bits);
-  if (presetName) selectPreset(presetName, bits);
-  else { setExprs(surprise(bits)); document.querySelectorAll('#bits button').forEach((x) => x.classList.toggle('on', x === b)); buildChips(); updateStudio(); }
+  document.querySelectorAll('#bits button').forEach((x) => x.classList.toggle('on', x === b));
+  if (source === 'preset' && presetName) return selectPreset(presetName, bits);
+  if (source === 'wallet' && account) { buildChips(); return fromWallet(); }
+  source = 'surprise'; baseExprs = surprise(bits); applyBase(); buildChips(); updateStudio();
 });
 $('surprise').onclick = () => {
-  presetName = null;
-  setExprs(surprise(bits));
-  if (!$('title').value || $('title').dataset.auto) { $('title').value = `Untitled ${Math.floor(Math.random() * 9000 + 1000)}`; $('title').dataset.auto = '1'; }
+  presetName = null; source = 'surprise';
+  baseExprs = surprise(bits); applyBase();
+  setAutoTitle(`Untitled ${Math.floor(Math.random() * 9000 + 1000)}`);
   document.querySelectorAll('.chip').forEach((c) => c.classList.remove('on'));
   updateStudio();
 };
-['e0', 'e1', 'e2'].forEach((id) => $(id).oninput = () => { presetName = null; document.querySelectorAll('.chip').forEach((c) => c.classList.remove('on')); updateStudio(); });
+['e0', 'e1', 'e2'].forEach((id) => $(id).oninput = () => { presetName = null; source = 'typed'; document.querySelectorAll('.chip').forEach((c) => c.classList.remove('on')); updateStudio(); });
 $('title').oninput = () => { delete $('title').dataset.auto; updateStudio(); };
 
 function updateStudio() {
   const exprs = ['e0', 'e1', 'e2'].map((id) => $(id).value.trim()).filter(Boolean);
   try {
-    studioDesign = compile(exprs, bits);
+    studioDesign = compile(exprs, bits, timeBits);
     $('s-error').textContent = '';
     const t = paint($('preview'), studioDesign, { title: $('title').value || 'Untitled', processor: CONFIG.PROCESSOR || '', tagline: 'preview' });
     $('s-gates').textContent = `${studioDesign.gateCount} NAND`;
@@ -384,6 +480,6 @@ $('l-go').onclick = async () => {
 selectPreset('Sierpinski', 5);
 loadGallery();
 if (processor && params.get('c')) {
-  Promise.all([chain.readCircuit(processor, params.get('c')), chain.readProcessor(processor)])
+  Promise.all([chain.readCircuit(processor, params.get('c')).then(withTime), chain.readProcessor(processor)])
     .then(([c, cpu]) => openDetail(c, cpu)).catch((e) => console.warn(e));
 }

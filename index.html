@@ -11,7 +11,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect width='24' height='24' rx='6' fill='%23141019'/><rect x='5' y='5' width='6' height='6' rx='1.5' fill='%23ff4fa3'/><rect x='13' y='5' width='6' height='6' rx='3' fill='%23f5b841'/><rect x='5' y='13' width='6' height='6' rx='3' fill='%2340d9b8'/><rect x='13' y='13' width='6' height='6' rx='1.5' fill='%23ff4fa3'/></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=9">
+<link rel="stylesheet" href="style.css?v=10">
 </head>
 <body>
 <header class="top">
@@ -75,7 +75,10 @@
   <section id="tab-detail" class="tab">
     <button class="back ghost" id="back">← Gallery</button>
     <div class="detail">
-      <div class="frame"><canvas id="big" width="1080" height="1080"></canvas></div>
+      <div>
+        <div class="frame"><canvas id="big" class="inspect" width="1080" height="1080"></canvas></div>
+        <p class="tap-hint">Tap any tile to see why it's that colour.</p>
+      </div>
       <aside>
         <h2 id="d-title">Circuit</h2>
         <dl id="d-traits"></dl>
@@ -83,6 +86,7 @@
           <button id="d-verify" class="primary">Verify on X Layer</button>
           <button id="d-download" class="ghost">Download</button>
           <button id="d-share" class="ghost">Share on X</button>
+          <button id="d-remix" class="ghost">Remix</button>
         </div>
         <p id="d-verify-out" class="note"></p>
       </aside>
@@ -92,7 +96,10 @@
   <!-- STUDIO -->
   <section id="tab-studio" class="tab on page-section">
     <div class="studio">
-      <div class="frame sticky"><canvas id="preview" width="1080" height="1080"></canvas></div>
+      <div class="sticky">
+        <div class="frame"><canvas id="preview" class="inspect" width="1080" height="1080"></canvas></div>
+        <p class="tap-hint">Tap any tile to see why it's that colour.</p>
+      </div>
       <div class="controls">
         <h2>Create your piece</h2>
         <p class="muted">Pick a pattern, change the size, or let Ọnà surprise you. Every design is a real circuit, so its look comes from its logic.</p>
@@ -103,6 +110,7 @@
         </div>
         <div class="row">
           <button id="surprise" class="ghost wide">✦ Surprise me</button>
+          <button id="from-wallet" class="ghost wide">◈ From my wallet</button>
         </div>
         <div class="field">
           <span class="label">Detail</span>
@@ -110,11 +118,17 @@
             <button data-bits="4">Bold</button><button data-bits="5" class="on">Balanced</button><button data-bits="6">Fine</button>
           </div>
         </div>
+        <div class="field">
+          <span class="label">Motion</span>
+          <div class="seg" id="motion">
+            <button data-m="0" class="on">Still</button><button data-m="1">Moving</button>
+          </div>
+        </div>
         <label class="field"><span class="label">Title</span><input id="title" maxlength="40" placeholder="Name your piece"></label>
 
         <details class="advanced">
           <summary>Advanced: write the rules yourself</summary>
-          <p class="muted small">Each cell is one input. <code>x0…</code> are the column's bits, <code>y0…</code> the row's. Use <code>&amp;</code> <code>|</code> <code>^</code> <code>~</code>. Each rule is one colour layer.</p>
+          <p class="muted small">Each cell is one input. <code>x0…</code> are the column's bits, <code>y0…</code> the row's, and <code>t0…t2</code> is time when Motion is on. Use <code>&amp;</code> <code>|</code> <code>^</code> <code>~</code>. Each rule is one colour layer.</p>
           <label>Layer 1 <input id="e0" spellcheck="false"></label>
           <label>Layer 2 <input id="e1" spellcheck="false" placeholder="optional"></label>
           <label>Layer 3 <input id="e2" spellcheck="false" placeholder="optional"></label>
@@ -208,7 +222,8 @@
     </div>
   </section>
 </main>
+<div id="tip" class="tip" role="status" hidden></div>
 <footer>Built on <a href="https://tapeout.net" target="_blank" rel="noopener">TapeOut</a> · X Layer <a id="foot-cpu" target="_blank" rel="noopener"></a></footer>
-<script type="module" src="js/app.js?v=9"></script>
+<script type="module" src="js/app.js?v=10"></script>
 </body>
 </html>

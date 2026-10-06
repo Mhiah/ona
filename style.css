@@ -145,7 +145,7 @@ dt{color:var(--muted)}dd{margin:0;font-family:var(--mono);font-size:.88rem;word-
 .seg{display:flex;background:var(--surface-2);border-radius:999px;padding:3px}
 .seg button{flex:1;border:0;background:transparent;color:var(--muted);padding:.5em}
 .seg button.on{background:var(--surface);color:var(--text);box-shadow:var(--shadow)}
-.row{margin:10px 0}
+.row{margin:10px 0;display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .advanced{margin:16px 0;padding:12px 14px;border:1px dashed var(--line);border-radius:14px}
 .advanced summary{cursor:pointer;font-weight:600;font-size:.92rem}
 .advanced label{display:block;margin:10px 0;color:var(--muted);font-size:.85rem}
@@ -247,3 +247,12 @@ footer{text-align:center;color:var(--muted);font-size:.85rem;padding:30px 16px;b
 
 @media (prefers-reduced-motion: reduce){.hero-stage .tilt{animation:none}}
 @media (prefers-reduced-motion: reduce){.reveal{opacity:1;transform:none}}
+
+/* ---------- tap a tile ---------- */
+canvas.inspect{cursor:crosshair;touch-action:manipulation}
+.tap-hint{margin:10px 2px 0;font-size:.82rem;color:var(--muted);text-align:center}
+.tip{position:fixed;z-index:50;max-width:260px;padding:12px 14px;border-radius:14px;background:var(--primary);color:var(--on-primary);
+  font-size:.85rem;line-height:1.45;box-shadow:0 10px 30px rgba(0,0,0,.25);pointer-events:none;animation:tipin .2s ease}
+.tip b{font-family:var(--mono);font-weight:600}
+.tip .sw{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;margin-left:4px;border:1px solid rgba(255,255,255,.5)}
+@keyframes tipin{from{opacity:0;transform:translateY(4px)}}

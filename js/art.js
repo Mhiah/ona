@@ -1,6 +1,6 @@
 // Turn a circuit's truth table into a deterministic artwork.
 // Each grid cell is one input combination; its colour is the circuit's output for that input.
-import { decode, compileSim, hexToBytes } from './netlist.js?v=9';
+import { decode, compileSim, hexToBytes } from './netlist.js?v=10';
 
 export function hash32(str) {
   let h = 0x811c9dc5;
@@ -12,14 +12,19 @@ function rng(seed) { // mulberry32
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
 
-/** Lay out inputs on a square-ish grid and evaluate every cell. */
-export function truthGrid({ netlistHex, nIn, nOut }) {
+/**
+ * Lay out inputs on a square-ish grid and evaluate every cell.
+ * Moving pieces (timeBits > 0) put their time inputs after x and y; `frame` picks the time value.
+ */
+export function truthGrid({ netlistHex, nIn, nOut, timeBits = 0 }, frame = 0) {
   const elements = decode(netlistHex, nIn);
   const run = compileSim(elements, nIn, nOut);
-  const xBits = Math.min(7, Math.ceil(nIn / 2));
-  const yBits = Math.min(7, nIn - xBits);
+  const moving = timeBits > 0 && (nIn - timeBits) % 2 === 0 && nIn - timeBits <= 14;
+  const xBits = moving ? (nIn - timeBits) / 2 : Math.min(7, Math.ceil(nIn / 2));
+  const yBits = moving ? xBits : Math.min(7, nIn - xBits);
   const extraBits = nIn - xBits - yBits; // circuits wider than 14 inputs: fix the rest from the netlist hash
-  const extra = extraBits > 0 ? (hash32(netlistHex) % 2 ** Math.min(extraBits, 30)) : 0;
+  const frames = moving ? 2 ** timeBits : 1;
+  const extra = moving ? frame % frames : extraBits > 0 ? (hash32(netlistHex) % 2 ** Math.min(extraBits, 30)) : 0;
   const w = 2 ** xBits, h = 2 ** yBits;
   const cells = new Uint32Array(w * h);
   const stateful = elements.some((e) => e.op === 1);
@@ -30,7 +35,7 @@ export function truthGrid({ netlistHex, nIn, nOut }) {
     if (stateful) state = r.state; // latches carry state across cells in reading order
     cells[y * w + x] = r.out;
   }
-  return { w, h, cells, xBits, yBits, extraBits, stateful, gateCount: elements.filter((e) => e.op === 0).length,
+  return { w, h, cells, xBits, yBits, extraBits, extra, frames, stateful, gateCount: elements.filter((e) => e.op === 0).length,
     latchCount: elements.filter((e) => e.op === 1).length };
 }
 
@@ -63,7 +68,7 @@ const STYLES = ['Tiles', 'Dots', 'Weave', 'Pixels'];
  * Returns traits shown beside the artwork.
  */
 export function render(canvas, circuit, meta = {}) {
-  const grid = truthGrid(circuit);
+  const grid = truthGrid(circuit, meta.frame || 0);
   // The look depends only on the logic, so a Studio preview matches the minted piece exactly.
   const seed = hash32(circuit.netlistHex);
   const theme = meta.theme === 'light' ? 'light' : 'dark';
@@ -121,7 +126,9 @@ export function render(canvas, circuit, meta = {}) {
     style, palette: pal.scheme, colors: levels, grid: `${grid.w}×${grid.h}`,
     density: `${Math.round((lit / (grid.w * grid.h)) * 100)}%`,
     gates: grid.gateCount, latches: grid.latchCount, stateful: grid.stateful,
-    inputsShown: grid.xBits + grid.yBits, inputsFixed: grid.extraBits,
+    inputsShown: grid.xBits + grid.yBits, inputsFixed: grid.frames > 1 ? 0 : grid.extraBits, frames: grid.frames,
+    // where the cells sit (in the 1080 drawing space), so a tap can be mapped back to its input
+    geo: { ox, oy, cell, w: grid.w, h: grid.h, xBits: grid.xBits, extra: grid.extra, cells: grid.cells, nOut: circuit.nOut },
   };
   if (bare) return traits;
 

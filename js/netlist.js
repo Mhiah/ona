@@ -65,10 +65,10 @@ export function compileSim(elements, nIn, nOut) {
 
 // ---------- expression compiler ----------
 // Grammar: expr := xor ('|' xor)* ; xor := and ('^' and)* ; and := unary ('&' unary)* ;
-//          unary := '~' unary | '(' expr ')' | '0' | '1' | x<n> | y<n>
+//          unary := '~' unary | '(' expr ')' | '0' | '1' | x<n> | y<n> | t<n>   (t = time, for moving pieces)
 function tokenize(src) {
   const tokens = [];
-  const re = /\s*(?:([xy]\d+)|([01])|([~&|^()]))/y;
+  const re = /\s*(?:([xyt]\d+)|([01])|([~&|^()]))/y;
   let m;
   re.lastIndex = 0;
   while (re.lastIndex < src.length) {
@@ -105,11 +105,12 @@ export function parse(src) {
 
 /**
  * Compile output expressions over a W×H grid to a NAND netlist.
- * Inputs: x0..x(bits-1) are signals 2..; y0..y(bits-1) follow. nIn = 2*bits.
+ * Inputs: x0..x(bits-1) are signals 2..; y0..y(bits-1) follow; then t0..t(timeBits-1) for moving pieces.
+ * nIn = 2*bits + timeBits. Each value of t is one frame of the animation.
  */
-export function compile(exprs, bits) {
+export function compile(exprs, bits, timeBits = 0) {
   if (!exprs.length || exprs.length > 3) throw new Error('Use 1 to 3 colour layers.');
-  const nIn = bits * 2;
+  const nIn = bits * 2 + timeBits;
   const bytes = [];
   const gates = [];
   const memo = new Map();
@@ -139,6 +140,10 @@ export function compile(exprs, bits) {
   };
   const varSignal = (name) => {
     const n = Number(name.slice(1));
+    if (name[0] === 't') {
+      if (n >= timeBits) throw new Error(timeBits ? `${name} is out of range (use t0–t${timeBits - 1}).` : `${name} needs Motion turned on.`);
+      return 2 + 2 * bits + n;
+    }
     if (n >= bits) throw new Error(`${name} is outside a ${2 ** bits}×${2 ** bits} grid (use ${name[0]}0–${name[0]}${bits - 1}).`);
     return 2 + (name[0] === 'x' ? n : bits + n);
   };
@@ -163,6 +168,52 @@ export function compile(exprs, bits) {
     invs.forEach((inv, k) => { outs[k] = raw(inv, 1); });
   }
   if (!tailOk()) throw new Error('Internal error: outputs are not the final elements.');
-  return { nIn, nOut: exprs.length, gateCount: gates.length, latchCount: 0, netlistHex: bytesToHex(bytes) };
+  return { nIn, nOut: exprs.length, gateCount: gates.length, latchCount: 0, timeBits, netlistHex: bytesToHex(bytes) };
 }
 function u24(v) { return [(v >> 16) & 255, (v >> 8) & 255, v & 255]; }
+
+/**
+ * Turn a NAND netlist back into Studio rules (for Remix). Returns null when the circuit
+ * can't be written as up to 3 rules over an x/y grid (latches, odd sizes, or rules too long to edit).
+ */
+export function netlistToExprs({ netlistHex, nIn, nOut, timeBits = 0 }) {
+  const els = decode(netlistHex, nIn);
+  const bits = (nIn - timeBits) / 2;
+  if (els.some((e) => e.op !== 0) || nOut > 3 || !Number.isInteger(bits) || bits < 1 || bits > 7) return null;
+  const name = (i) => (i < bits ? `x${i}` : i < 2 * bits ? `y${i - bits}` : `t${i - 2 * bits}`);
+  // node: { s: text, neg: text of its inverse, c: 0|1|null, inv: signal it inverts, nand: [a, b] }
+  const sig = [{ s: '0', c: 0 }, { s: '1', c: 1 }];
+  for (let i = 0; i < nIn; i++) sig.push({ s: name(i), c: null });
+  const wrap = (t) => (/^[~]?[xyt]\d+$|^[01]$/.test(t) || (t[0] === '(' && balanced(t)) ? t : `(${t})`);
+  const notOf = (i) => { const n = sig[i];
+    return n.c !== null ? { s: String(1 - n.c), c: 1 - n.c } : n.neg ? { s: n.neg, c: null, neg: n.s, inv: i } : { s: `~${wrap(n.s)}`, c: null, neg: n.s, inv: i }; };
+  const other = (pair, x) => (pair[0] === x ? pair[1] : pair[1] === x ? pair[0] : -1);
+  for (const e of els) {
+    const A = sig[e.a], B = sig[e.b];
+    let r;
+    if (A.c === 0 || B.c === 0) r = { s: '1', c: 1 };
+    else if (A.c === 1) r = notOf(e.b);
+    else if (B.c === 1 || e.a === e.b) r = notOf(e.a);
+    else {
+      // XOR is built as nand(nand(a, t), nand(b, t)) with t = nand(a, b): write it back as a ^ b
+      let xor = null;
+      if (A.nand && B.nand) for (const t of A.nand) {
+        const a = other(A.nand, t), b = other(B.nand, t);
+        if (a >= 0 && b >= 0 && sig[t].nand && other(sig[t].nand, a) === b) xor = [a, b];
+      }
+      if (xor) r = { s: `${wrap(sig[xor[0]].s)} ^ ${wrap(sig[xor[1]].s)}`, c: null };
+      else if (A.inv !== undefined && B.inv !== undefined) r = { s: `${wrap(sig[A.inv].s)} | ${wrap(sig[B.inv].s)}`, c: null }; // nand(~a, ~b) = a | b
+      else r = { s: `~(${wrap(A.s)} & ${wrap(B.s)})`, c: null, neg: `${wrap(A.s)} & ${wrap(B.s)}` };
+      r.nand = [e.a, e.b];
+    }
+    if (r.s.length > 1500) return null;
+    sig.push(r);
+  }
+  return { bits, timeBits, exprs: sig.slice(-nOut).map((n) => n.s) };
+}
+function balanced(t) { // true if the outer parentheses wrap the whole text
+  if (t[0] !== '(') return true;
+  let d = 0;
+  for (let i = 0; i < t.length; i++) { if (t[i] === '(') d++; else if (t[i] === ')') d--; if (d === 0 && i < t.length - 1) return false; }
+  return true;
+}

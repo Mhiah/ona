@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { compile, decode, compileSim, parse } from '../js/netlist.js';
+import { compile, decode, compileSim, parse, netlistToExprs } from '../js/netlist.js';
 
 // 1. Decode the known on-chain XOR reference (CPU #0 circuit #1 evaluates 0,1,1,0).
 {
@@ -44,4 +44,43 @@ for (const [exprs, bits] of cases) {
 }
 assert.throws(() => parse('x0 &'), /ended early/);
 assert.throws(() => compile(['x9'], 5), /outside/);
+// 4. Time inputs (moving pieces): t bits come after x and y.
+{
+  const c = compile(['x1^y1^t0', 'x0&t1'], 2, 2);
+  assert.equal(c.nIn, 6);
+  const run = compileSim(decode(c.netlistHex, c.nIn), c.nIn, c.nOut);
+  for (let i = 0; i < 64; i++) {
+    const b = (k) => (i >> k) & 1; // x0 x1 y0 y1 t0 t1
+    assert.equal(run(i).out, (b(1) ^ b(3) ^ b(4)) | ((b(0) & b(5)) << 1), `moving @ ${i}`);
+  }
+  assert.throws(() => compile(['t0'], 3), /Motion/);
+}
+// 5. Remix: a netlist turned back into rules compiles to the same truth table.
+for (const [exprs, bits, tb] of [[['~(x0&y0) & ~(x1&y1) & ~(x2&y2)'], 3, 0], [['x2^y2', 'x3^y3', 'x4^y4'], 5, 0],
+  [['(x3^y3) & ~(x0|y0)', 'x2^y3 ^ (x1&y1)'], 4, 0], [['x1^y1^t0', 'y0&~x0^t2'], 2, 3], [['1', 'x0'], 2, 0]]) {
+  const c = compile(exprs, bits, tb);
+  const r = netlistToExprs(c);
+  assert.ok(r, `remixable ${exprs}`);
+  const c2 = compile(r.exprs, r.bits, r.timeBits);
+  const a = compileSim(decode(c.netlistHex, c.nIn), c.nIn, c.nOut), b = compileSim(decode(c2.netlistHex, c2.nIn), c2.nIn, c2.nOut);
+  for (let i = 0; i < 2 ** c.nIn; i++) assert.equal(b(i).out, a(i).out, `remix ${exprs} @ ${i}`);
+  console.log(`ok  remix ${JSON.stringify(exprs)} -> ${JSON.stringify(r.exprs).slice(0, 80)}`);
+}
+// 6. Remix fuzz: random rules (deterministic seed) always round-trip to the same truth table.
+{
+  let seed = 7; const rnd = (n) => { seed = (seed * 1103515245 + 12345) >>> 0; return seed % n; };
+  const leaf = (b, tb) => { const k = rnd(tb ? 3 : 2); return k === 2 ? `t${rnd(tb)}` : `${'xy'[k]}${rnd(b)}`; };
+  const gen = (d, b, tb) => (d === 0 || rnd(4) === 0 ? (rnd(5) === 0 ? `~${leaf(b, tb)}` : leaf(b, tb))
+    : `(${gen(d - 1, b, tb)} ${'&|^'[rnd(3)]} ${rnd(4) === 0 ? '~' : ''}${gen(d - 1, b, tb)})`);
+  for (let n = 0; n < 60; n++) {
+    const b = 2 + rnd(4), tb = rnd(2) ? 3 : 0, layers = 1 + rnd(3);
+    const exprs = Array.from({ length: layers }, () => gen(3, b, tb));
+    const c = compile(exprs, b, tb), r = netlistToExprs(c);
+    assert.ok(r, `remixable ${exprs}`);
+    const c2 = compile(r.exprs, r.bits, r.timeBits);
+    const A = compileSim(decode(c.netlistHex, c.nIn), c.nIn, c.nOut), B = compileSim(decode(c2.netlistHex, c2.nIn), c2.nIn, c2.nOut);
+    for (let i = 0; i < 2 ** c.nIn; i++) assert.equal(B(i).out, A(i).out, `fuzz ${exprs} @ ${i}`);
+  }
+  console.log('ok  remix fuzz: 60 random rule sets round-trip');
+}
 console.log('all netlist tests passed');
