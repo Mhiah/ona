@@ -1,7 +1,7 @@
-import { CONFIG } from '../config.js?v=6';
-import { compile } from './netlist.js?v=6';
-import { render, truthGrid } from './art.js?v=6';
-import * as chain from './chain.js?v=6';
+import { CONFIG } from '../config.js?v=7';
+import { compile } from './netlist.js?v=7';
+import { render, truthGrid } from './art.js?v=7';
+import * as chain from './chain.js?v=7';
 
 const $ = (id) => document.getElementById(id);
 const short = (a) => `${a.slice(0, 6)}…${a.slice(-4)}`;
