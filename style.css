@@ -66,7 +66,6 @@ input:focus{outline:2px solid var(--pink);outline-offset:1px}
 .mark{width:28px;height:28px}
 nav{display:flex;gap:2px;margin-right:auto;background:var(--surface-2);border-radius:999px;padding:3px}
 nav button{background:transparent;color:var(--muted);border:0;padding:.45em .95em;font-size:.92rem}
-nav .short{display:none}
 nav button.on{color:var(--text);background:var(--surface);box-shadow:var(--shadow)}
 .top-actions{display:flex;align-items:center;gap:6px}
 
@@ -235,7 +234,7 @@ footer{text-align:center;color:var(--muted);font-size:.85rem;padding:30px 16px;b
   .top{flex-wrap:wrap;padding:10px 16px;gap:10px}
   nav{order:3;width:100%;justify-content:space-between}
   nav button{flex:1}
-  nav .long{display:none} nav .short{display:inline}
+
   .top-actions{margin-left:auto}
   #connect{padding:.5em .9em;font-size:.88rem}
   main{padding:18px 16px 48px}
