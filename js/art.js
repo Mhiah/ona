@@ -1,6 +1,6 @@
 // Turn a circuit's truth table into a deterministic artwork.
 // Each grid cell is one input combination; its colour is the circuit's output for that input.
-import { decode, compileSim, hexToBytes } from './netlist.js?v=5';
+import { decode, compileSim, hexToBytes } from './netlist.js?v=6';
 
 export function hash32(str) {
   let h = 0x811c9dc5;

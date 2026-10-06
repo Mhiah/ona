@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light"><!-- light only for now; dark tokens are kept in style.css -->
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,15 +7,11 @@
 <meta name="description" content="Every TapeOut circuit on X Layer is a unique artwork, drawn from its own logic. Design one, tape it out, own it.">
 <meta property="og:title" content="Ọnà · Circuit art on X Layer">
 <meta property="og:description" content="On-chain logic you can see. Every TapeOut circuit on X Layer becomes a unique artwork.">
-<meta name="theme-color" content="#0b0b0f">
+<meta name="theme-color" content="#f6f3ee">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect width='24' height='24' rx='6' fill='%23141019'/><rect x='5' y='5' width='6' height='6' rx='1.5' fill='%23ff4fa3'/><rect x='13' y='5' width='6' height='6' rx='3' fill='%23f5b841'/><rect x='5' y='13' width='6' height='6' rx='3' fill='%2340d9b8'/><rect x='13' y='13' width='6' height='6' rx='1.5' fill='%23ff4fa3'/></svg>">
-<script>
-  // Apply the saved theme before first paint to avoid a flash.
-  try { const t = localStorage.getItem('ona-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}
-</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=5">
+<link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
 <header class="top">
@@ -29,10 +25,6 @@
     <button data-tab="about"><span class="long">How it works</span><span class="short">About</span></button>
   </nav>
   <div class="top-actions">
-    <button id="theme" class="icon" aria-label="Switch light or dark mode" title="Light / dark">
-      <svg class="sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.5"/><g stroke-linecap="round"><path d="M12 2v2.5M12 19.5V22M4.2 4.2l1.8 1.8M18 18l1.8 1.8M2 12h2.5M19.5 12H22M4.2 19.8 6 18M18 6l1.8-1.8"/></g></svg>
-      <svg class="moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></svg>
-    </button>
     <button id="connect" class="ghost">Connect wallet</button>
   </div>
 </header>
@@ -55,11 +47,18 @@
           <li><b>No code</b><span>Tap, preview, mint</span></li>
         </ul>
       </div>
-      <figure class="hero-art">
-        <canvas id="hero-a" width="1080" height="1080"></canvas>
-        <canvas id="hero-b" width="1080" height="1080"></canvas>
-        <figcaption id="hero-cap">Sierpinski · 18 NAND</figcaption>
-      </figure>
+      <div class="hero-stage" id="hero-stage">
+        <i class="ghost g2" aria-hidden="true"></i>
+        <i class="ghost g1" aria-hidden="true"></i>
+        <div class="tilt" id="hero-tilt">
+          <figure class="hero-art" id="hero-card">
+            <canvas id="hero-a" width="1080" height="1080"></canvas>
+            <i class="sheen" id="hero-sheen" aria-hidden="true"></i>
+            <i class="hud" aria-hidden="true"></i>
+            <figcaption id="hero-cap">Sierpinski · 18 NAND</figcaption>
+          </figure>
+        </div>
+      </div>
     </div>
 
     <div class="section-head">
@@ -92,7 +91,7 @@
   </section>
 
   <!-- STUDIO -->
-  <section id="tab-studio" class="tab">
+  <section id="tab-studio" class="tab on page-section">
     <div class="studio">
       <div class="frame sticky"><canvas id="preview" width="1080" height="1080"></canvas></div>
       <div class="controls">
@@ -136,14 +135,68 @@
   </section>
 
   <!-- ABOUT -->
-  <section id="tab-about" class="tab prose">
-    <h2>How it works</h2>
-    <ol class="steps">
-      <li><b>A circuit is a program.</b> On <a href="https://tapeout.net" target="_blank" rel="noopener">TapeOut</a>, circuits are built from NAND gates and stored on X Layer as NFTs. Each gate uses one NAND transistor, which is burned when the circuit is taped out.</li>
-      <li><b>The art is the answer sheet.</b> Ọnà reads the circuit from chain, runs it for every input, and draws one cell per input. Colours, style and palette come from a fingerprint of the circuit, so the picture can't be changed or faked.</li>
-      <li><b>Anyone can check it.</b> “Verify on X Layer” asks the processor contract to compute sample cells for free and compares them with the picture.</li>
-      <li><b>Making art supports the creator.</b> Pieces made in the Studio are taped out on the Ọnà processor. Your wallet buys exactly as many transistors as your design uses, and that payment goes to the processor's creator.</li>
-    </ol>
+  <section id="tab-about" class="tab on page-section">
+    <div class="story-head reveal">
+      <p class="kicker">How it works</p>
+      <h2>Logic you can see, check and own.</h2>
+    </div>
+    <div class="story" id="story">
+      <div class="story-pin">
+        <div class="story-cards">
+          <article class="story-card" data-i="0">
+            <div class="story-text">
+              <span class="count">01 / 04</span>
+              <h3>Write a rule. It becomes a circuit.</h3>
+              <p>Pick a pattern in the Studio. Ọnà turns it into NAND gates, the one part every <a href="https://tapeout.net" target="_blank" rel="noopener">TapeOut</a> circuit is built from.</p>
+            </div>
+            <div class="story-vis vis-gates">
+              <code id="v-rule"></code>
+              <span class="arrow">↓</span>
+              <div class="gates" id="v-gates"></div>
+              <span class="tag" id="v-gatecount"></span>
+            </div>
+          </article>
+          <article class="story-card" data-i="1">
+            <div class="story-text">
+              <span class="count">02 / 04</span>
+              <h3>Every input gets an answer.</h3>
+              <p>Ọnà runs the circuit for every row and column of the grid. Each answer colours one tile, so the logic draws the picture.</p>
+            </div>
+            <div class="story-vis vis-paint"><div class="paint"><canvas id="v-paint" width="540" height="540"></canvas><i class="scanbar"></i></div></div>
+          </article>
+          <article class="story-card" data-i="2">
+            <div class="story-text">
+              <span class="count">03 / 04</span>
+              <h3>Anyone can check it.</h3>
+              <p>Verify asks the contract on X Layer to answer sample tiles itself, for free, and compares them with the picture. No trust needed.</p>
+            </div>
+            <div class="story-vis vis-verify">
+              <div class="vrow" style="--d:0"><span>tile (12, 7)</span><span>→ 1</span><b>✓</b></div>
+              <div class="vrow" style="--d:1"><span>tile (3, 28)</span><span>→ 0</span><b>✓</b></div>
+              <div class="vrow" style="--d:2"><span>tile (21, 21)</span><span>→ 1</span><b>✓</b></div>
+              <div class="vrow" style="--d:3"><span>tile (30, 4)</span><span>→ 0</span><b>✓</b></div>
+              <div class="vdone" style="--d:4">8 / 8 match on X Layer</div>
+            </div>
+          </article>
+          <article class="story-card" data-i="3">
+            <div class="story-text">
+              <span class="count">04 / 04</span>
+              <h3>Mint it. It's yours.</h3>
+              <p>Your wallet buys one transistor per gate and tapes the circuit out on the Ọnà processor. You own the piece, and the payment goes to the processor's creator.</p>
+            </div>
+            <div class="story-vis vis-mint">
+              <div class="mint-card"><canvas id="v-mint" width="400" height="400"></canvas>
+                <div class="mint-meta"><b>Kente</b><span id="v-mintgates"></span></div>
+                <span class="mint-btn">Mint</span>
+                <span class="mint-ok">✓ Minted</span>
+              </div>
+            </div>
+          </article>
+        </div>
+        <div class="story-progress" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+      </div>
+    </div>
+    <div class="prose">
     <p class="muted small">TapeOut's X Layer contracts are new and not independently audited. Every transaction is shown in your wallet before you sign. Nothing here is investment advice.</p>
     <details id="launch-panel" class="advanced">
       <summary>Processor owner: launch a processor</summary>
@@ -156,9 +209,10 @@
       <button id="l-go" class="primary wide">Launch processor</button>
       <p id="l-status" class="note"></p>
     </details>
+    </div>
   </section>
 </main>
 <footer>Built on <a href="https://tapeout.net" target="_blank" rel="noopener">TapeOut</a> · X Layer <a id="foot-cpu" target="_blank" rel="noopener"></a></footer>
-<script type="module" src="js/app.js?v=5"></script>
+<script type="module" src="js/app.js?v=6"></script>
 </body>
 </html>

@@ -1,7 +1,7 @@
-import { CONFIG } from '../config.js?v=5';
-import { compile } from './netlist.js?v=5';
-import { render, truthGrid } from './art.js?v=5';
-import * as chain from './chain.js?v=5';
+import { CONFIG } from '../config.js?v=6';
+import { compile } from './netlist.js?v=6';
+import { render, truthGrid } from './art.js?v=6';
+import * as chain from './chain.js?v=6';
 
 const $ = (id) => document.getElementById(id);
 const short = (a) => `${a.slice(0, 6)}…${a.slice(-4)}`;
@@ -13,8 +13,7 @@ let account = null;
 let cpuInfo = null; // the gallery processor, once read
 
 // ---------- theme ----------
-const darkQuery = matchMedia('(prefers-color-scheme: dark)');
-const theme = () => document.documentElement.dataset.theme || (darkQuery.matches ? 'dark' : 'light');
+const theme = () => 'light'; // dark mode comes later; its colours are already in style.css
 const painted = new Set(); // every canvas we draw, so a theme switch can repaint it
 function paint(canvas, circuit, meta) {
   painted.add(canvas);
@@ -23,24 +22,34 @@ function paint(canvas, circuit, meta) {
 }
 function repaintAll() {
   for (const c of painted) if (c.isConnected) render(c, c._art.circuit, { ...c._art.meta, theme: theme() }); else painted.delete(c);
-  document.querySelector('meta[name=theme-color]').content = theme() === 'dark' ? '#0b0a0f' : '#f6f3ee';
 }
-$('theme').onclick = () => {
-  const next = theme() === 'dark' ? 'light' : 'dark';
-  document.documentElement.dataset.theme = next;
-  try { localStorage.setItem('ona-theme', next); } catch {}
-  repaintAll();
-};
-darkQuery.addEventListener?.('change', () => { if (!document.documentElement.dataset.theme) repaintAll(); });
 document.fonts?.ready.then(repaintAll); // canvas captions use Geist; redraw once it has loaded
 
-// ---------- tabs ----------
+// ---------- sections ----------
+// Gallery, Studio and About live on one page; the nav scrolls to them. Only the detail view replaces the page.
+const PAGE = ['gallery', 'studio', 'about'];
+function setNav(tab) { document.querySelectorAll('nav button').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab)); }
 function show(tab) {
-  document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('on', t.id === 'tab-' + tab));
-  document.querySelectorAll('nav button').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
-  scrollTo(0, 0);
+  const detail = tab === 'detail';
+  $('tab-detail').classList.toggle('on', detail);
+  PAGE.forEach((t) => $('tab-' + t).classList.toggle('on', !detail));
+  if (detail) { scrollTo(0, 0); return; }
+  setNav(tab);
+  if (tab === 'gallery') scrollTo({ top: 0, behavior: 'smooth' });
+  else $('tab-' + tab).scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 document.querySelectorAll('nav button, [data-go]').forEach((b) => b.addEventListener('click', () => show(b.dataset.tab || b.dataset.go)));
+// highlight the nav button for whichever section is in view
+if ('IntersectionObserver' in window) {
+  const seen = new Map();
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach((e) => seen.set(e.target.id.slice(4), e.isIntersecting ? e.intersectionRatio : 0));
+    if ($('tab-detail').classList.contains('on')) return;
+    const best = PAGE.reduce((a, t) => ((seen.get(t) || 0) > (seen.get(a) || 0) ? t : a), 'gallery');
+    if (seen.get(best)) setNav(best);
+  }, { rootMargin: '-35% 0px -45% 0px', threshold: [0, .01, .5, 1] });
+  PAGE.forEach((t) => io.observe($('tab-' + t)));
+}
 $('back').onclick = () => { history.replaceState(null, '', processor ? `?p=${processor}` : './'); show('gallery'); };
 
 $('connect').onclick = async () => {
@@ -85,22 +94,92 @@ function surprise(bits) {
   return PRESETS.Moiré(bits);
 }
 
+const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// ---------- how it works: pinned story ----------
+{
+  const story = $('story'), cards = [...story.querySelectorAll('.story-card')], bars = [...story.querySelectorAll('.story-progress i')];
+  const rule = design('Sierpinski', 4);
+  $('v-rule').textContent = PRESETS.Sierpinski(4)[0];
+  $('v-gatecount').textContent = `${rule.gateCount} NAND gates`;
+  const cols = ['--pink', '--gold', '--teal'];
+  $('v-gates').innerHTML = range(rule.gateCount).map((i) => `<i style="--i:${i};--c:var(${cols[i % 3]})"></i>`).join('');
+  paint($('v-paint'), design('Moiré', 5), { bare: true });
+  const kente = design('Kente', 5);
+  paint($('v-mint'), kente, { bare: true });
+  $('v-mintgates').textContent = `${kente.gateCount} transistors`;
+  let step = -1;
+  const set = (n) => {
+    if (n === step) return;
+    step = n;
+    cards.forEach((c, i) => { c.classList.toggle('is-on', i === n); c.classList.toggle('is-past', i < n); });
+    bars.forEach((b, i) => b.classList.toggle('on', i === n));
+  };
+  if (calm) { story.classList.add('calm'); cards.forEach((c) => c.classList.add('is-on')); }
+  else {
+    const onScroll = () => {
+      const r = story.getBoundingClientRect(), run = r.height - innerHeight;
+      const p = Math.min(1, Math.max(0, -r.top / Math.max(1, run)));
+      set(Math.min(3, Math.floor(p * 4)));
+    };
+    addEventListener('scroll', onScroll, { passive: true }); addEventListener('resize', onScroll); onScroll();
+  }
+}
+
+// ---------- reveal on scroll ----------
+const revealer = 'IntersectionObserver' in window && !calm
+  ? new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('in'); revealer.unobserve(e.target); } }), { rootMargin: '0px 0px -10% 0px' })
+  : null;
+function reveal(el) { if (!revealer) return; el.classList.add('reveal'); revealer.observe(el); }
+document.querySelectorAll('.section-head, .cpu-card, .studio .frame, .studio .controls, .story-head, #tab-about .prose').forEach(reveal);
+
 // ---------- hero ----------
 const HERO = [['Sierpinski', 6], ['Moiré', 5], ['Kente', 5], ['Carpet', 5], ['Weave', 4], ['Lattice', 6]];
-let heroIndex = 0, heroFront = 'a';
+let heroIndex = 0;
+// caption "decodes": random glyphs settle into the real text left to right
+function decode(el, text, ms = 700) {
+  const glyphs = '01░▒▓<>/#*';
+  const t0 = performance.now();
+  (function frame(now) {
+    const k = Math.min(1, (now - t0) / ms), fixed = Math.floor(k * text.length);
+    el.textContent = text.slice(0, fixed) + [...text.slice(fixed)].map(ch => ch === ' ' ? ' ' : glyphs[Math.random() * glyphs.length | 0]).join('');
+    if (k < 1) requestAnimationFrame(frame);
+  })(t0);
+}
 function heroShow(i) {
   const [name, bits] = HERO[i % HERO.length];
-  const back = heroFront === 'a' ? 'b' : 'a';
-  const c = design(name, bits);
-  paint($('hero-' + back), c, { bare: true });
-  $('hero-' + back).style.opacity = 1;
-  $('hero-' + heroFront).style.opacity = 0;
-  heroFront = back;
-  $('hero-cap').textContent = `${name} · ${c.gateCount} NAND`;
+  const c = design(name, bits), card = $('hero-card'), art = $('hero-a');
+  const caption = `${name} · ${c.gateCount} NAND · ${1 << (2 * bits)} tiles`;
+  if (calm || !card.animate || i === 0) { paint(art, c, { bare: true }); $('hero-cap').textContent = caption; return; }
+  // the front card lifts off and glides away, the next one rises from the stack behind it
+  const out = card.animate([
+    { transform: 'none', opacity: 1 },
+    { transform: 'translate3d(-4%,-6%,80px) rotateX(8deg) rotateY(-14deg) rotateZ(-4deg)', opacity: 1, offset: .35 },
+    { transform: 'translate3d(-60%,-2%,40px) rotateY(-32deg) rotateZ(-12deg)', opacity: 0 }
+  ], { duration: 750, easing: 'cubic-bezier(.5,0,.75,0)' });
+  $('hero-stage').classList.add('shuffle');
+  out.onfinish = () => {
+    paint(art, c, { bare: true });
+    decode($('hero-cap'), caption);
+    $('hero-stage').classList.remove('shuffle');
+    card.animate([
+      { transform: 'translate3d(5%,-5%,-120px) rotateZ(4deg) scale(.94)', opacity: 0, filter: 'blur(4px)' },
+      { transform: 'none', opacity: 1, filter: 'none' }
+    ], { duration: 900, easing: 'cubic-bezier(.16,1,.3,1)' });
+    $('hero-sheen').animate([{ opacity: 0, backgroundPosition: '120% 0' }, { opacity: 1, offset: .3 }, { opacity: 0, backgroundPosition: '-20% 0' }], { duration: 1300, delay: 250, easing: 'ease-out' });
+  };
 }
-$('hero-a').style.opacity = 0; $('hero-b').style.opacity = 0;
 heroShow(0);
-if (!matchMedia('(prefers-reduced-motion: reduce)').matches) setInterval(() => heroShow(++heroIndex), 4500);
+// gentle 3D tilt that follows the pointer on desktop
+if (!calm && matchMedia('(hover: hover)').matches) {
+  const stage = $('hero-stage'), tilt = $('hero-tilt');
+  stage.addEventListener('pointermove', e => {
+    const r = stage.getBoundingClientRect(), x = (e.clientX - r.left) / r.width - .5, y = (e.clientY - r.top) / r.height - .5;
+    tilt.style.transform = `rotateY(${x * 10}deg) rotateX(${-y * 10}deg)`;
+  });
+  stage.addEventListener('pointerleave', () => { tilt.style.transform = ''; });
+}
+if (!calm) setInterval(() => heroShow(++heroIndex), 5000);
 
 // ---------- gallery ----------
 function card({ title, sub, right, onClick }) {
@@ -112,6 +191,7 @@ function card({ title, sub, right, onClick }) {
   el.querySelector('.price').textContent = right || '';
   if (onClick) el.onclick = onClick;
   $('gallery').append(el);
+  reveal(el);
   return el;
 }
 const piecePrice = (gates) => cpuInfo ? `${chain.fmt(BigInt(gates) * cpuInfo.mintPrice + cpuInfo.protocolFee + cpuInfo.tapeoutFee, 4)} OKB` : '';
