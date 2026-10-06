@@ -1,4 +1,4 @@
-# Launch checklist (deadline: Oct 6, 12:00 HKT)
+# Launch checklist (deadline: Oct 9, 12:00 HKT)
 
 You sign every transaction yourself. Never share your seed phrase or private key with anyone, including me.
 
