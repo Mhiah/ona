@@ -12,11 +12,12 @@ You need about **0.02 OKB** on X Layer mainnet: about 0.0066 deploy fee, a few a
 
 ## 3. Launch the processor
 1. Open the site in OKX Wallet's browser (or desktop with OKX Wallet or MetaMask).
-2. Go to **How it works → Processor owner: launch a processor**.
-3. Suggested terms (permanent once launched):
+2. Go to **About → Processor owner: launch a processor**.
+3. Terms used (permanent once launched):
    - Name `Ọnà`, symbol `ONA`
-   - Supply **1,000,000** transistors
-   - Price **0.0001 OKB** per transistor. A typical artwork uses about 18 NAND, so you earn about 0.0018 OKB per piece. The buyer pays about 0.004 OKB in total including TapeOut fees (fees at the time of checking; the app shows live amounts).
+   - Supply **10,000** transistors
+   - Price **0.0005 OKB** per transistor. A typical artwork uses about 18 NAND, so you earn about 0.009 OKB per piece, plus the buyer pays TapeOut fees and gas (the app shows live amounts).
+   - Launched at `0x8f260db93dfb2a0ecb4172bcb35edd18b21ec2f3`.
 4. Click **Launch processor** and approve in your wallet. Copy the processor address it shows.
 5. Send the address to Claude. It goes into `config.js` as `PROCESSOR`, then gets pushed.
 
