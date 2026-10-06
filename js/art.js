@@ -1,6 +1,6 @@
 // Turn a circuit's truth table into a deterministic artwork.
 // Each grid cell is one input combination; its colour is the circuit's output for that input.
-import { decode, compileSim, hexToBytes } from './netlist.js?v=4';
+import { decode, compileSim, hexToBytes } from './netlist.js?v=5';
 
 export function hash32(str) {
   let h = 0x811c9dc5;
@@ -127,16 +127,16 @@ export function render(canvas, circuit, meta = {}) {
 
   // Caption
   ctx.fillStyle = `rgba(${ink},0.85)`;
-  ctx.font = '600 30px "Space Grotesk", system-ui, sans-serif';
+  ctx.font = '600 30px "Geist", system-ui, sans-serif';
   ctx.textBaseline = 'alphabetic';
   ctx.fillText(meta.title || 'Untitled circuit', pad - 18, size - 30);
   ctx.textAlign = 'right';
   ctx.fillStyle = `rgba(${ink},0.5)`;
-  ctx.font = '500 22px "JetBrains Mono", ui-monospace, monospace';
+  ctx.font = '500 22px "Geist Mono", ui-monospace, monospace';
   const tag = [meta.circuitId ? `#${meta.circuitId}` : meta.tagline || 'preview', `${grid.gateCount} NAND`, grid.latchCount ? `${grid.latchCount} LATCH` : ''].filter(Boolean).join(' · ');
   ctx.fillText(tag, size - pad + 18, size - 30);
   ctx.textAlign = 'left';
-  ctx.font = '500 20px "JetBrains Mono", ui-monospace, monospace';
+  ctx.font = '500 20px "Geist Mono", ui-monospace, monospace';
   ctx.fillText(meta.processor ? `${meta.processor.slice(0, 6)}…${meta.processor.slice(-4)} · X Layer` : 'Ọnà · X Layer', pad - 18, 36);
 
   return traits;

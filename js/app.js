@@ -1,7 +1,7 @@
-import { CONFIG } from '../config.js?v=4';
-import { compile } from './netlist.js?v=4';
-import { render, truthGrid } from './art.js?v=4';
-import * as chain from './chain.js?v=4';
+import { CONFIG } from '../config.js?v=5';
+import { compile } from './netlist.js?v=5';
+import { render, truthGrid } from './art.js?v=5';
+import * as chain from './chain.js?v=5';
 
 const $ = (id) => document.getElementById(id);
 const short = (a) => `${a.slice(0, 6)}…${a.slice(-4)}`;
@@ -32,6 +32,7 @@ $('theme').onclick = () => {
   repaintAll();
 };
 darkQuery.addEventListener?.('change', () => { if (!document.documentElement.dataset.theme) repaintAll(); });
+document.fonts?.ready.then(repaintAll); // canvas captions use Geist; redraw once it has loaded
 
 // ---------- tabs ----------
 function show(tab) {
