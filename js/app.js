@@ -1,7 +1,7 @@
-import { CONFIG } from '../config.js?v=3';
-import { compile } from './netlist.js?v=3';
-import { render, truthGrid } from './art.js?v=3';
-import * as chain from './chain.js?v=3';
+import { CONFIG } from '../config.js?v=4';
+import { compile } from './netlist.js?v=4';
+import { render, truthGrid } from './art.js?v=4';
+import * as chain from './chain.js?v=4';
 
 const $ = (id) => document.getElementById(id);
 const short = (a) => `${a.slice(0, 6)}…${a.slice(-4)}`;
@@ -10,8 +10,28 @@ const params = new URLSearchParams(location.search);
 let processor = params.get('p') || CONFIG.PROCESSOR || null; // null = not launched yet: show examples
 let current = null; // circuit shown in detail view
 let account = null;
+let cpuInfo = null; // the gallery processor, once read
 
-$('brand-name').textContent = CONFIG.NAME;
+// ---------- theme ----------
+const darkQuery = matchMedia('(prefers-color-scheme: dark)');
+const theme = () => document.documentElement.dataset.theme || (darkQuery.matches ? 'dark' : 'light');
+const painted = new Set(); // every canvas we draw, so a theme switch can repaint it
+function paint(canvas, circuit, meta) {
+  painted.add(canvas);
+  canvas._art = { circuit, meta };
+  return render(canvas, circuit, { ...meta, theme: theme() });
+}
+function repaintAll() {
+  for (const c of painted) if (c.isConnected) render(c, c._art.circuit, { ...c._art.meta, theme: theme() }); else painted.delete(c);
+  document.querySelector('meta[name=theme-color]').content = theme() === 'dark' ? '#0b0a0f' : '#f6f3ee';
+}
+$('theme').onclick = () => {
+  const next = theme() === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem('ona-theme', next); } catch {}
+  repaintAll();
+};
+darkQuery.addEventListener?.('change', () => { if (!document.documentElement.dataset.theme) repaintAll(); });
 
 // ---------- tabs ----------
 function show(tab) {
@@ -19,7 +39,7 @@ function show(tab) {
   document.querySelectorAll('nav button').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
   scrollTo(0, 0);
 }
-document.querySelectorAll('nav button').forEach((b) => b.onclick = () => { show(b.dataset.tab); if (b.dataset.tab === 'studio') updateStudio(); });
+document.querySelectorAll('nav button, [data-go]').forEach((b) => b.addEventListener('click', () => show(b.dataset.tab || b.dataset.go)));
 $('back').onclick = () => { history.replaceState(null, '', processor ? `?p=${processor}` : './'); show('gallery'); };
 
 $('connect').onclick = async () => {
@@ -27,62 +47,118 @@ $('connect').onclick = async () => {
   catch (e) { alert(e.message); }
 };
 
+// ---------- patterns ----------
+const range = (n) => Array.from({ length: n }, (_, i) => i);
+const PRESETS = {
+  'Sierpinski': (b) => [range(b).map((i) => `~(x${i}&y${i})`).join(' & ')],
+  'Moiré': (b) => [`x${b - 3}^y${b - 3}`, `x${b - 2}^y${b - 2}`, `x${b - 1}^y${b - 1}`],
+  'Weave': (b) => [`x0^y1`, `x1^y0`, `x${b - 1}^y${b - 1}`],
+  'Lattice': (b) => [`(x${b - 1}^y${b - 1}) & ~(x0|y0)`, `x${b - 2}^y${b - 1} ^ (x1&y1)`],
+  'Carpet': (b) => [range(b).map((i) => `(x${i}&y${i})`).join(' | '), `x${b - 1}^y${b - 2}`],
+  'Kente': (b) => [`x${b - 1}^y${b - 2}`, `(x1^y1)&x${b - 2}`, `y0&~x0`],
+};
+const design = (name, bits) => compile(PRESETS[name](bits), bits);
+
+/** Random but pleasing rules: mostly high bits for bold shapes, some low bits for texture. */
+function surprise(bits) {
+  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  const hi = () => Math.max(0, bits - 1 - Math.floor(Math.random() * Math.min(3, bits)));
+  const any = () => Math.floor(Math.random() * bits);
+  const term = () => pick([
+    () => `x${hi()}^y${hi()}`, () => `x${any()}&y${any()}`, () => `~(x${hi()}|y${any()})`,
+    () => `(x${any()}^y${hi()})&x${hi()}`, () => `x${hi()}^y${any()}^x${any()}`,
+  ])();
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const layers = 1 + Math.floor(Math.random() * 3);
+    const exprs = range(layers).map(() => {
+      let e = term();
+      const extra = Math.floor(Math.random() * 2);
+      for (let k = 0; k < extra; k++) e = `(${e}) ${pick(['^', '&', '|'])} (${term()})`;
+      return e;
+    });
+    const c = compile(exprs, bits);
+    const g = truthGrid(c);
+    const lit = g.cells.reduce((n, v) => n + (v ? 1 : 0), 0) / g.cells.length;
+    if (lit > 0.15 && lit < 0.85 && c.gateCount >= 8 && c.gateCount <= 40) return exprs;
+  }
+  return PRESETS.Moiré(bits);
+}
+
+// ---------- hero ----------
+const HERO = [['Sierpinski', 6], ['Moiré', 5], ['Kente', 5], ['Carpet', 5], ['Weave', 4], ['Lattice', 6]];
+let heroIndex = 0, heroFront = 'a';
+function heroShow(i) {
+  const [name, bits] = HERO[i % HERO.length];
+  const back = heroFront === 'a' ? 'b' : 'a';
+  const c = design(name, bits);
+  paint($('hero-' + back), c, { bare: true });
+  $('hero-' + back).style.opacity = 1;
+  $('hero-' + heroFront).style.opacity = 0;
+  heroFront = back;
+  $('hero-cap').textContent = `${name} · ${c.gateCount} NAND`;
+}
+$('hero-a').style.opacity = 0; $('hero-b').style.opacity = 0;
+heroShow(0);
+if (!matchMedia('(prefers-reduced-motion: reduce)').matches) setInterval(() => heroShow(++heroIndex), 4500);
+
 // ---------- gallery ----------
+function card({ title, sub, right, onClick }) {
+  const el = document.createElement('div');
+  el.className = 'card';
+  el.innerHTML = `<canvas width="480" height="480"></canvas><div class="meta"><b></b><div><span class="sub"></span><span class="price"></span></div></div>`;
+  el.querySelector('b').textContent = title;
+  el.querySelector('.sub').textContent = sub;
+  el.querySelector('.price').textContent = right || '';
+  if (onClick) el.onclick = onClick;
+  $('gallery').append(el);
+  return el;
+}
+const piecePrice = (gates) => cpuInfo ? `${chain.fmt(BigInt(gates) * cpuInfo.mintPrice + cpuInfo.protocolFee + cpuInfo.tapeoutFee, 4)} OKB` : '';
+
 async function loadGallery() {
-  const card = $('cpu-card'), grid = $('gallery');
-  grid.innerHTML = '';
+  const info = $('cpu-card');
+  $('gallery').innerHTML = '';
   if (!processor) return showExamples();
-  card.innerHTML = '<div class="muted">Reading processor from X Layer…</div>';
+  $('gallery-title').textContent = 'Gallery';
+  info.innerHTML = '<div class="muted">Reading from X Layer…</div>';
   $('foot-cpu').textContent = '· ' + short(processor); $('foot-cpu').href = chain.explorerAddr(processor);
   try {
-    const cpu = await chain.readProcessor(processor);
+    const cpu = cpuInfo = await chain.readProcessor(processor);
     const isOurs = CONFIG.PROCESSOR && processor.toLowerCase() === CONFIG.PROCESSOR.toLowerCase();
-    const earned = cpu.minted * cpu.mintPrice;
-    card.innerHTML = `
+    $('gallery-title').textContent = isOurs ? 'Gallery' : esc(cpu.name || 'Processor');
+    info.innerHTML = `
       <div><span>Processor</span><b>${esc(cpu.name || 'Unnamed')}</b></div>
       <div><span>Artworks</span><b>${cpu.circuitCount}</b></div>
       <div><span>Transistors sold</span><b>${cpu.minted.toLocaleString()} / ${cpu.supplyCap.toLocaleString()}</b></div>
-      <div><span>Price</span><b>${chain.fmt(cpu.mintPrice)} OKB</b></div>
-      <div><span>Creator earned</span><b>${chain.fmt(earned, 4)} OKB</b></div>
+      <div><span>Price each</span><b>${chain.fmt(cpu.mintPrice)} OKB</b></div>
       ${isOurs ? '' : `<div class="muted" style="flex-basis:100%">You're viewing another TapeOut processor as art. <a href="./">Back to ${esc(CONFIG.NAME)}</a></div>`}`;
-    if (!cpu.circuitCount) { grid.innerHTML = '<p class="muted">No circuits yet. Make the first one in the Studio.</p>'; return; }
-    const ids = Array.from({ length: Math.min(cpu.circuitCount, 48) }, (_, i) => cpu.circuitCount - i);
-    for (const id of ids) {
-      const el = document.createElement('div');
-      el.className = 'card';
-      el.innerHTML = `<canvas width="1080" height="1080"></canvas><div><span>#${id}</span><span class="g">…</span></div>`;
-      grid.append(el);
+    if (!cpu.circuitCount) { $('gallery').innerHTML = '<p class="muted">No artworks yet. Be the first in the Studio.</p>'; return; }
+    for (const id of range(Math.min(cpu.circuitCount, 48)).map((i) => cpu.circuitCount - i)) {
+      const el = card({ title: `${cpu.name || 'Circuit'} #${id}`, sub: 'Loading…' });
       chain.readCircuit(processor, id).then((c) => {
-        const t = render(el.querySelector('canvas'), c, { circuitId: id, processor, title: `${cpu.name} #${id}` });
-        el.querySelector('.g').textContent = `${t.gates} NAND · ${t.style}`;
+        const t = paint(el.querySelector('canvas'), c, { bare: true, size: 480, circuitId: id });
+        el.querySelector('.sub').textContent = `${short(c.owner)} · ${t.gates} NAND`;
         el.onclick = () => openDetail(c, cpu);
       }).catch((e) => {
-        el.querySelector('.g').textContent = 'could not load';
-        el.title = e.message;
+        el.querySelector('.sub').textContent = 'Could not load';
         el.querySelector('canvas').replaceWith(Object.assign(document.createElement('p'), { className: 'card-err', textContent: e.message }));
-        console.warn(id, e);
       });
     }
-  } catch (e) {
-    card.innerHTML = `<div class="error">${esc(e.message)}</div>`;
-  }
+  } catch (e) { info.innerHTML = `<div class="error">${esc(e.message)}</div>`; }
 }
 function showExamples() {
+  $('gallery-title').textContent = 'Example pieces';
   $('cpu-card').innerHTML = `<div style="flex-basis:100%"><span>Coming soon</span><b>The ${esc(CONFIG.NAME)} processor launches on X Layer shortly.</b></div>
-    <div class="muted" style="flex-basis:100%">These are example pieces. Tap one to open it in the Studio.</div>`;
-  const grid = $('gallery');
-  const examples = [['Sierpinski', 5], ['Moiré', 5], ['Weave', 4], ['Lattice', 5], ['Carpet', 5], ['Sierpinski', 6], ['Moiré', 6], ['Lattice', 4]];
+    <div class="muted" style="flex-basis:100%">These pieces are previews. Tap one to make it yours in the Studio.</div>`;
+  const examples = [['Sierpinski', 5], ['Moiré', 5], ['Kente', 5], ['Weave', 4], ['Lattice', 5], ['Carpet', 5], ['Sierpinski', 6], ['Kente', 6]];
   for (const [name, bits] of examples) {
-    const c = compile(PRESETS[name](bits), bits);
-    const el = document.createElement('div');
-    el.className = 'card';
-    el.innerHTML = `<canvas width="1080" height="1080"></canvas><div><span>${esc(name)}</span><span>${c.gateCount} NAND</span></div>`;
-    grid.append(el);
-    render(el.querySelector('canvas'), c, { title: name, seedKey: `${name}-${bits}` });
-    el.onclick = () => { $('preset').value = name; $('bits').value = String(bits); applyPreset(); show('studio'); };
+    const c = design(name, bits);
+    const el = card({ title: name, sub: `${c.gateCount} NAND`, right: 'Preview', onClick: () => { selectPreset(name, bits); show('studio'); } });
+    paint(el.querySelector('canvas'), c, { bare: true, size: 480 });
   }
 }
-$('any-go').onclick = () => {
+$('any-form').onsubmit = (ev) => {
+  ev.preventDefault();
   const v = $('any-cpu').value.trim();
   if (!/^0x[0-9a-fA-F]{40}$/.test(v)) return alert('Paste a processor address (0x + 40 hex characters).');
   processor = v; history.replaceState(null, '', `?p=${v}`); loadGallery();
@@ -92,10 +168,10 @@ function openDetail(c, cpu) {
   current = { ...c, cpuName: cpu?.name };
   history.replaceState(null, '', `?p=${c.processor}&c=${c.id}`);
   const title = `${cpu?.name || 'Circuit'} #${c.id}`;
-  const t = render($('big'), c, { circuitId: c.id, processor: c.processor, title });
+  const t = paint($('big'), c, { circuitId: c.id, processor: c.processor, title });
   $('d-title').textContent = title;
   const rows = [['Owner', `<a href="${chain.explorerAddr(c.owner)}" target="_blank" rel="noopener">${short(c.owner)}</a>`],
-    ['Gates', `${t.gates} NAND${t.latches ? ` + ${t.latches} LATCH` : ''}`], ['Inputs → outputs', `${c.nIn} → ${c.nOut}`],
+    ['Size', `${t.gates} NAND${t.latches ? ` + ${t.latches} LATCH` : ''}`], ['Inputs → outputs', `${c.nIn} → ${c.nOut}`],
     ['Canvas', t.grid + (t.inputsFixed ? ` (${t.inputsFixed} inputs fixed)` : '')], ['Style', t.style], ['Palette', `${t.palette}, ${t.colors} colours`],
     ['Lit cells', t.density], ['Processor', `<a href="${chain.explorerAddr(c.processor)}" target="_blank" rel="noopener">${short(c.processor)}</a>`]];
   if (t.stateful) rows.push(['Memory', 'Has latches; state carries cell to cell']);
@@ -104,7 +180,6 @@ function openDetail(c, cpu) {
   $('d-verify').disabled = t.stateful;
   show('detail');
 }
-
 $('d-verify').onclick = async () => {
   const c = current; const out = $('d-verify-out');
   out.textContent = 'Asking the processor contract…';
@@ -112,7 +187,7 @@ $('d-verify').onclick = async () => {
     const grid = truthGrid(c);
     const block = await chain.blockNumber();
     const total = grid.w * grid.h;
-    const picks = [0, total - 1, ...Array.from({ length: 6 }, (_, i) => Math.floor(((i + 1) * total) / 7))];
+    const picks = [0, total - 1, ...range(6).map((i) => Math.floor(((i + 1) * total) / 7))];
     let ok = 0;
     for (const input of picks) {
       const got = await chain.evalOnChain(c.processor, c.id, c.nIn, c.nOut, input, '0x' + block.toString(16));
@@ -129,60 +204,79 @@ $('d-download').onclick = () => {
 };
 $('d-share').onclick = () => {
   const url = (CONFIG.SITE_URL || location.origin + location.pathname) + `?p=${current.processor}&c=${current.id}`;
-  const text = `My circuit is a piece of art 🎨 ${current.cpuName || 'Circuit'} #${current.id}, drawn from its own NAND logic on @XLayerOfficial via TapeOut.`;
+  const text = `${current.cpuName || 'Circuit'} #${current.id}: a piece of art drawn from its own on-chain logic. Made with Ọnà on @XLayerOfficial via TapeOut.`;
   open(`https://x.com/intent/post?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`, '_blank', 'noopener');
 };
 
 // ---------- studio ----------
-const PRESETS = {
-  'Sierpinski': (b) => [range(b).map((i) => `~(x${i}&y${i})`).join(' & ')],
-  'Moiré': (b) => [`x${b - 3}^y${b - 3}`, `x${b - 2}^y${b - 2}`, `x${b - 1}^y${b - 1}`],
-  'Weave': (b) => [`x0^y1`, `x1^y0`, `x${b - 1}^y${b - 1}`],
-  'Lattice': (b) => [`(x${b - 1}^y${b - 1}) & ~(x0|y0)`, `x${b - 2}^y${b - 1} ^ (x1&y1)`],
-  'Carpet': (b) => [range(b).map((i) => `(x${i}&y${i})`).join(' | '), `x${b - 1}^y${b - 2}`],
-  'Blank': () => ['x0^y0'],
-};
-function range(n) { return Array.from({ length: n }, (_, i) => i); }
-$('preset').innerHTML = Object.keys(PRESETS).map((k) => `<option>${k}</option>`).join('');
-function applyPreset() {
-  const exprs = PRESETS[$('preset').value](Number($('bits').value));
-  ['e0', 'e1', 'e2'].forEach((id, i) => $(id).value = exprs[i] || '');
-  if (!$('title').value || $('title').dataset.auto) { $('title').value = $('preset').value; $('title').dataset.auto = '1'; }
-  updateStudio();
+let bits = 5, presetName = 'Sierpinski', studioDesign = null;
+function buildChips() {
+  const box = $('patterns'); box.innerHTML = '';
+  for (const name of Object.keys(PRESETS)) {
+    const b = document.createElement('button');
+    b.className = 'chip' + (name === presetName ? ' on' : '');
+    b.innerHTML = `<canvas width="160" height="160"></canvas><span>${esc(name)}</span>`;
+    b.onclick = () => selectPreset(name, bits);
+    box.append(b);
+    paint(b.querySelector('canvas'), design(name, bits), { bare: true, size: 160 });
+  }
 }
-$('preset').onchange = applyPreset;
-$('bits').onchange = applyPreset;
-['e0', 'e1', 'e2'].forEach((id) => $(id).oninput = updateStudio);
+function setExprs(exprs) { ['e0', 'e1', 'e2'].forEach((id, i) => { $(id).value = exprs[i] || ''; }); }
+function selectPreset(name, b = bits) {
+  presetName = name; bits = b;
+  document.querySelectorAll('#bits button').forEach((x) => x.classList.toggle('on', Number(x.dataset.bits) === bits));
+  setExprs(PRESETS[name](bits));
+  if (!$('title').value || $('title').dataset.auto) { $('title').value = name; $('title').dataset.auto = '1'; }
+  buildChips(); updateStudio();
+}
+document.querySelectorAll('#bits button').forEach((b) => b.onclick = () => {
+  bits = Number(b.dataset.bits);
+  if (presetName) selectPreset(presetName, bits);
+  else { setExprs(surprise(bits)); document.querySelectorAll('#bits button').forEach((x) => x.classList.toggle('on', x === b)); buildChips(); updateStudio(); }
+});
+$('surprise').onclick = () => {
+  presetName = null;
+  setExprs(surprise(bits));
+  if (!$('title').value || $('title').dataset.auto) { $('title').value = `Untitled ${Math.floor(Math.random() * 9000 + 1000)}`; $('title').dataset.auto = '1'; }
+  document.querySelectorAll('.chip').forEach((c) => c.classList.remove('on'));
+  updateStudio();
+};
+['e0', 'e1', 'e2'].forEach((id) => $(id).oninput = () => { presetName = null; document.querySelectorAll('.chip').forEach((c) => c.classList.remove('on')); updateStudio(); });
 $('title').oninput = () => { delete $('title').dataset.auto; updateStudio(); };
 
-let design = null;
 function updateStudio() {
   const exprs = ['e0', 'e1', 'e2'].map((id) => $(id).value.trim()).filter(Boolean);
   try {
-    design = compile(exprs, Number($('bits').value));
+    studioDesign = compile(exprs, bits);
     $('s-error').textContent = '';
-    const t = render($('preview'), design, { title: $('title').value || 'Untitled', processor: CONFIG.PROCESSOR || '' });
-    $('s-stats').textContent = `${design.gateCount} NAND · ${t.style} · ${t.palette} · ${t.density} lit`;
+    const t = paint($('preview'), studioDesign, { title: $('title').value || 'Untitled', processor: CONFIG.PROCESSOR || '', tagline: 'preview' });
+    $('s-gates').textContent = `${studioDesign.gateCount} NAND`;
+    $('s-style').textContent = t.style;
     $('s-mint').disabled = false;
-  } catch (e) { design = null; $('s-error').textContent = e.message; $('s-mint').disabled = true; }
+  } catch (e) { studioDesign = null; $('s-error').textContent = e.message; $('s-mint').disabled = true; }
   updateQuote();
 }
 async function updateQuote() {
   const q = $('s-quote');
-  if (!design) { q.textContent = ''; return; }
-  if (!CONFIG.PROCESSOR) { q.innerHTML = 'Preview only: the Ọnà processor launches soon.'; $('s-mint').disabled = true; return; }
+  if (!studioDesign) { q.textContent = ''; $('s-price').textContent = '–'; return; }
+  if (!CONFIG.PROCESSOR) {
+    $('s-price').textContent = 'Soon';
+    q.textContent = 'Minting opens when the Ọnà processor launches. You can still design and preview.';
+    $('s-mint').disabled = true; return;
+  }
   try {
-    const r = await chain.quote(CONFIG.PROCESSOR, design, account);
-    q.innerHTML = `Buy <b>${r.toMint}</b> NAND (${chain.fmt(r.mintValue)} OKB) + tape-out fee ${chain.fmt(r.tapeoutFee)} OKB = <b>${chain.fmt(r.total)} OKB</b> + gas`;
+    const r = await chain.quote(CONFIG.PROCESSOR, studioDesign, account);
+    $('s-price').textContent = `${chain.fmt(r.total, 4)} OKB`;
+    q.innerHTML = `${r.toMint} transistors (${chain.fmt(r.mintValue)} OKB) + tape-out fee ${chain.fmt(r.tapeoutFee)} OKB, plus a tiny network fee.`;
   } catch (e) { q.textContent = e.message; }
 }
 $('s-mint').onclick = async () => {
   const st = $('s-status'); $('s-mint').disabled = true;
   try {
-    const res = await chain.tapeout(CONFIG.PROCESSOR, design, (msg, hash) => {
+    const res = await chain.tapeout(CONFIG.PROCESSOR, studioDesign, (msg, hash) => {
       st.innerHTML = esc(msg) + (hash ? ` <a href="${chain.explorerTx(hash)}" target="_blank" rel="noopener">view tx</a>` : '');
     });
-    st.innerHTML = `Taped out as #${res.id}. <a href="?p=${CONFIG.PROCESSOR}&c=${res.id}">Open your artwork</a>`;
+    st.innerHTML = `Done! Taped out as #${res.id}. <a href="?p=${CONFIG.PROCESSOR}&c=${res.id}">Open your artwork</a>`;
   } catch (e) { st.textContent = e.message; }
   finally { $('s-mint').disabled = false; }
 };
@@ -196,12 +290,12 @@ $('l-go').onclick = async () => {
     if (!confirm(`Launch "${$('l-name').value}" with ${supply.toLocaleString()} transistors at ${chain.fmt(price)} OKB each?\n\nThis can never be changed.`)) return;
     const r = await chain.launchProcessor({ name: $('l-name').value, symbol: $('l-symbol').value, story: $('l-story').value,
       supply, mintPriceWei: price, onStatus: (m, h) => st.innerHTML = esc(m) + (h ? ` <a href="${chain.explorerTx(h)}" target="_blank" rel="noopener">tx</a>` : '') });
-    st.innerHTML = `Launched: <b>${r.processor}</b><br>Put this address in <code>config.js</code> as PROCESSOR. <a href="${chain.explorerTx(r.hash)}" target="_blank" rel="noopener">Deploy tx</a>`;
+    st.innerHTML = `Launched: <b>${r.processor}</b><br>Send this address to be added to the site. <a href="${chain.explorerTx(r.hash)}" target="_blank" rel="noopener">Deploy tx</a>`;
   } catch (e) { st.textContent = e.message; }
 };
 
 // ---------- boot ----------
-applyPreset();
+selectPreset('Sierpinski', 5);
 loadGallery();
 if (processor && params.get('c')) {
   Promise.all([chain.readCircuit(processor, params.get('c')), chain.readProcessor(processor)])

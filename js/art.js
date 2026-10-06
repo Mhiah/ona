@@ -1,6 +1,6 @@
 // Turn a circuit's truth table into a deterministic artwork.
 // Each grid cell is one input combination; its colour is the circuit's output for that input.
-import { decode, compileSim, hexToBytes } from './netlist.js?v=3';
+import { decode, compileSim, hexToBytes } from './netlist.js?v=4';
 
 export function hash32(str) {
   let h = 0x811c9dc5;
@@ -34,21 +34,24 @@ export function truthGrid({ netlistHex, nIn, nOut }) {
     latchCount: elements.filter((e) => e.op === 1).length };
 }
 
-export function palette(seed, nOut) {
+export function palette(seed, nOut, theme = 'dark') {
   const r = rng(seed);
+  const light = theme === 'light';
   const levels = 2 ** Math.min(nOut, 3);
   const hueA = Math.floor(r() * 360);
   const scheme = Math.floor(r() * 3);
   const offset = [40, 110, 170][scheme]; // analogous, split, contrast
   const hueB = (hueA + offset * (r() < 0.5 ? 1 : -1) + 360) % 360;
   const sat = 72 + Math.floor(r() * 20);
-  const bg = `hsl(${hueA}, 28%, 7%)`;
+  const bg = light ? `hsl(${hueA}, 40%, 94%)` : `hsl(${hueA}, 28%, 7%)`;
   const colors = [bg];
   for (let v = 1; v < levels; v++) {
     const t = levels > 2 ? (v - 1) / (levels - 2) : 0;
     const d = ((hueB - hueA + 540) % 360) - 180; // shortest way round the colour wheel
     const hue = Math.round((hueA + d * t + 360) % 360);
-    colors.push(`hsl(${hue}, ${sat}%, ${levels > 2 ? Math.round(46 + 26 * t) : 62}%)`);
+    const yellowish = hue >= 40 && hue <= 100; // yellows wash out on light backgrounds
+    const lum = light ? (levels > 2 ? Math.round(36 + 22 * t) : 46) - (yellowish ? 12 : 0) : (levels > 2 ? Math.round(46 + 26 * t) : 62);
+    colors.push(`hsl(${hue}, ${sat}%, ${lum}%)`);
   }
   return { bg, colors, scheme: ['Analogous', 'Split', 'Contrast'][scheme] };
 }
@@ -61,27 +64,36 @@ const STYLES = ['Tiles', 'Dots', 'Weave', 'Pixels'];
  */
 export function render(canvas, circuit, meta = {}) {
   const grid = truthGrid(circuit);
-  const seed = hash32(circuit.netlistHex + ':' + (meta.seedKey ?? meta.circuitId ?? ''));
-  const pal = palette(seed, circuit.nOut);
+  // The look depends only on the logic, so a Studio preview matches the minted piece exactly.
+  const seed = hash32(circuit.netlistHex);
+  const theme = meta.theme === 'light' ? 'light' : 'dark';
+  const pal = palette(seed, circuit.nOut, theme);
+  const ink = theme === 'light' ? '23,20,28' : '255,255,255';
   const style = STYLES[seed % STYLES.length];
-  const size = canvas.width = canvas.height = 1080;
+  const px = meta.size || 1080; // drawing is done in a 1080 space and scaled to the canvas size
+  canvas.width = canvas.height = px;
+  const size = 1080;
   const ctx = canvas.getContext('2d');
+  ctx.setTransform(px / size, 0, 0, px / size, 0, 0);
   const levels = pal.colors.length;
   const value = (c) => (circuit.nOut <= 3 ? c : (c ^ (c >>> 3) ^ (c >>> 6) ^ (c >>> 9)) & 7) % levels;
 
-  // Background + chip body
-  ctx.fillStyle = '#07070a'; ctx.fillRect(0, 0, size, size);
-  const pad = 96, inner = size - pad * 2;
-  ctx.fillStyle = pal.bg;
-  roundRect(ctx, pad - 18, pad - 18, inner + 36, inner + 36, 22); ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,0.10)'; ctx.lineWidth = 2; ctx.stroke();
-
-  // Pins: inputs on the left/top, outputs on the right — one pin per real signal
-  ctx.fillStyle = 'rgba(255,255,255,0.28)';
-  drawPins(ctx, 'left', grid.yBits + grid.extraBits, pad, inner);
-  drawPins(ctx, 'top', grid.xBits, pad, inner);
-  ctx.fillStyle = pal.colors[levels - 1];
-  drawPins(ctx, 'right', circuit.nOut, pad, inner);
+  // bare: full-bleed artwork only (hero, thumbnails). Otherwise a framed "chip" with pins and caption.
+  const bare = !!meta.bare;
+  const pad = bare ? 54 : 96, inner = size - pad * 2;
+  if (bare) { ctx.fillStyle = pal.bg; ctx.fillRect(0, 0, size, size); }
+  else {
+    ctx.fillStyle = theme === 'light' ? '#fdfbf7' : '#0d0b11'; ctx.fillRect(0, 0, size, size);
+    ctx.fillStyle = pal.bg;
+    roundRect(ctx, pad - 18, pad - 18, inner + 36, inner + 36, 22); ctx.fill();
+    ctx.strokeStyle = `rgba(${ink},0.10)`; ctx.lineWidth = 2; ctx.stroke();
+    // Pins: inputs on the left/top, outputs on the right — one pin per real signal
+    ctx.fillStyle = `rgba(${ink},0.28)`;
+    drawPins(ctx, 'left', grid.yBits + grid.extraBits, pad, inner);
+    drawPins(ctx, 'top', grid.xBits, pad, inner);
+    ctx.fillStyle = pal.colors[levels - 1];
+    drawPins(ctx, 'right', circuit.nOut, pad, inner);
+  }
 
   // Cells
   // Square cells, centred, so tiny circuits (e.g. 2×1) still look deliberate.
@@ -94,37 +106,40 @@ export function render(canvas, circuit, meta = {}) {
     counts[v]++;
     if (v === 0) continue;
     ctx.fillStyle = pal.colors[v];
-    const px = ox + x * cw, py = oy + y * ch;
+    const cx = ox + x * cw, cy = oy + y * ch;
     const g = Math.min(cw, ch);
-    if (style === 'Tiles') { roundRect(ctx, px + g * 0.08, py + g * 0.08, cw * 0.84, ch * 0.84, g * 0.18); ctx.fill(); }
-    else if (style === 'Dots') { ctx.beginPath(); ctx.arc(px + cw / 2, py + ch / 2, g * (0.22 + 0.24 * v / (levels - 1)), 0, Math.PI * 2); ctx.fill(); }
+    if (style === 'Tiles') { roundRect(ctx, cx + g * 0.08, cy + g * 0.08, cw * 0.84, ch * 0.84, g * 0.18); ctx.fill(); }
+    else if (style === 'Dots') { ctx.beginPath(); ctx.arc(cx + cw / 2, cy + ch / 2, g * (0.22 + 0.24 * v / (levels - 1)), 0, Math.PI * 2); ctx.fill(); }
     else if (style === 'Weave') {
-      if ((x + y) % 2) ctx.fillRect(px + cw * 0.1, py + ch * 0.3, cw * 0.8, ch * 0.4);
-      else ctx.fillRect(px + cw * 0.3, py + ch * 0.1, cw * 0.4, ch * 0.8);
-    } else ctx.fillRect(px, py, cw + 0.5, ch + 0.5);
+      if ((x + y) % 2) ctx.fillRect(cx + cw * 0.1, cy + ch * 0.3, cw * 0.8, ch * 0.4);
+      else ctx.fillRect(cx + cw * 0.3, cy + ch * 0.1, cw * 0.4, ch * 0.8);
+    } else ctx.fillRect(cx, cy, cw + 0.5, ch + 0.5);
   }
 
-  // Caption
-  ctx.fillStyle = 'rgba(255,255,255,0.82)';
-  ctx.font = '600 30px "Space Grotesk", system-ui, sans-serif';
-  ctx.textBaseline = 'alphabetic';
-  ctx.fillText(meta.title || 'Untitled circuit', pad - 18, size - 30);
-  ctx.textAlign = 'right';
-  ctx.fillStyle = 'rgba(255,255,255,0.5)';
-  ctx.font = '500 22px "JetBrains Mono", ui-monospace, monospace';
-  const tag = [meta.circuitId ? `#${meta.circuitId}` : 'preview', `${grid.gateCount} NAND`, grid.latchCount ? `${grid.latchCount} LATCH` : ''].filter(Boolean).join(' · ');
-  ctx.fillText(tag, size - pad + 18, size - 30);
-  ctx.textAlign = 'left';
-  ctx.font = '500 20px "JetBrains Mono", ui-monospace, monospace';
-  ctx.fillText(meta.processor ? `${meta.processor.slice(0, 6)}…${meta.processor.slice(-4)} · X Layer` : 'Ọnà · X Layer', pad - 18, 36);
-
   const lit = counts.slice(1).reduce((a, b) => a + b, 0);
-  return {
+  const traits = {
     style, palette: pal.scheme, colors: levels, grid: `${grid.w}×${grid.h}`,
     density: `${Math.round((lit / (grid.w * grid.h)) * 100)}%`,
     gates: grid.gateCount, latches: grid.latchCount, stateful: grid.stateful,
     inputsShown: grid.xBits + grid.yBits, inputsFixed: grid.extraBits,
   };
+  if (bare) return traits;
+
+  // Caption
+  ctx.fillStyle = `rgba(${ink},0.85)`;
+  ctx.font = '600 30px "Space Grotesk", system-ui, sans-serif';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText(meta.title || 'Untitled circuit', pad - 18, size - 30);
+  ctx.textAlign = 'right';
+  ctx.fillStyle = `rgba(${ink},0.5)`;
+  ctx.font = '500 22px "JetBrains Mono", ui-monospace, monospace';
+  const tag = [meta.circuitId ? `#${meta.circuitId}` : meta.tagline || 'preview', `${grid.gateCount} NAND`, grid.latchCount ? `${grid.latchCount} LATCH` : ''].filter(Boolean).join(' · ');
+  ctx.fillText(tag, size - pad + 18, size - 30);
+  ctx.textAlign = 'left';
+  ctx.font = '500 20px "JetBrains Mono", ui-monospace, monospace';
+  ctx.fillText(meta.processor ? `${meta.processor.slice(0, 6)}…${meta.processor.slice(-4)} · X Layer` : 'Ọnà · X Layer', pad - 18, 36);
+
+  return traits;
 }
 
 function drawPins(ctx, side, n, pad, inner) {
