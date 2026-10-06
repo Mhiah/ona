@@ -1,7 +1,7 @@
-import { CONFIG } from '../config.js?v=7';
-import { compile } from './netlist.js?v=7';
-import { render, truthGrid } from './art.js?v=7';
-import * as chain from './chain.js?v=7';
+import { CONFIG } from '../config.js?v=8';
+import { compile } from './netlist.js?v=8';
+import { render, truthGrid } from './art.js?v=8';
+import * as chain from './chain.js?v=8';
 
 const $ = (id) => document.getElementById(id);
 const short = (a) => `${a.slice(0, 6)}…${a.slice(-4)}`;
@@ -96,9 +96,9 @@ function surprise(bits) {
 
 const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-// ---------- how it works: pinned story ----------
+// ---------- how it works: four boxes that stack as you scroll ----------
 {
-  const story = $('story'), cards = [...story.querySelectorAll('.story-card')], bars = [...story.querySelectorAll('.story-progress i')];
+  const story = $('story'), cards = [...story.querySelectorAll('.story-card')];
   const rule = design('Sierpinski', 4);
   $('v-rule').textContent = PRESETS.Sierpinski(4)[0];
   $('v-gatecount').textContent = `${rule.gateCount} NAND gates`;
@@ -108,21 +108,26 @@ const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const kente = design('Kente', 5);
   paint($('v-mint'), kente, { bare: true });
   $('v-mintgates').textContent = `${kente.gateCount} transistors`;
-  let step = -1;
-  const set = (n) => {
-    if (n === step) return;
-    step = n;
-    cards.forEach((c, i) => { c.classList.toggle('is-on', i === n); c.classList.toggle('is-past', i < n); });
-    bars.forEach((b, i) => b.classList.toggle('on', i === n));
-  };
   if (calm) { story.classList.add('calm'); cards.forEach((c) => c.classList.add('is-on')); }
   else {
-    const onScroll = () => {
-      const r = story.getBoundingClientRect(), run = r.height - innerHeight;
-      const p = Math.min(1, Math.max(0, -r.top / Math.max(1, run)));
-      set(Math.min(3, Math.floor(p * 4)));
+    // each box plays its little animation while it's on screen, and replays every few seconds
+    const replay = (c) => { // snap back to the start, then play again
+      c.classList.add('reset'); c.classList.remove('is-on'); void c.offsetWidth;
+      c.classList.remove('reset'); void c.offsetWidth; c.classList.add('is-on');
     };
-    addEventListener('scroll', onScroll, { passive: true }); addEventListener('resize', onScroll); onScroll();
+    const live = new Map();
+    const io = new IntersectionObserver((es) => es.forEach((e) => {
+      const c = e.target;
+      if (e.isIntersecting && !live.has(c)) { replay(c); live.set(c, setInterval(() => replay(c), 8000)); }
+      else if (!e.isIntersecting && live.has(c)) { clearInterval(live.get(c)); live.delete(c); c.classList.remove('is-on'); }
+    }), { threshold: .4 });
+    cards.forEach((c) => io.observe(c));
+    // the box underneath shrinks a little as the next one slides over it
+    const onScroll = () => cards.forEach((c, i) => {
+      const next = cards[i + 1];
+      c.classList.toggle('covered', !!next && next.getBoundingClientRect().top - c.getBoundingClientRect().top < 60);
+    });
+    addEventListener('scroll', onScroll, { passive: true }); onScroll();
   }
 }
 

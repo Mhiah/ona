@@ -163,43 +163,39 @@ dt{color:var(--muted)}dd{margin:0;font-family:var(--mono);font-size:.88rem;word-
 .reveal{opacity:0;transform:translateY(24px);transition:opacity .7s ease,transform .7s cubic-bezier(.16,1,.3,1)}
 .reveal.in{opacity:1;transform:none}
 
-/* ---------- how it works: pinned story ---------- */
+/* ---------- how it works: stacked boxes ---------- */
 .kicker{margin:0 0 6px;font-size:.78rem;text-transform:uppercase;letter-spacing:.12em;color:var(--pink);font-weight:600}
 .story-head h2{font-size:clamp(1.8rem,4vw,2.6rem);margin:0 0 8px}
-.story{position:relative;height:calc(100svh + 3 * 75svh)}
-.story-pin{position:sticky;top:66px;height:calc(100svh - 66px);display:flex;flex-direction:column;justify-content:center;gap:22px}
-.story-cards{position:relative;height:min(460px,calc(100svh - 180px))}
-.story-card{position:absolute;inset:0;display:grid;grid-template-columns:1fr 1fr;gap:36px;align-items:center;padding:36px;border-radius:28px;
-  background:color-mix(in srgb,var(--surface) 82%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
-  border:1px solid var(--line);box-shadow:var(--shadow);
-  opacity:0;transform:translateY(70px) scale(.97);transition:opacity .6s ease,transform .8s cubic-bezier(.16,1,.3,1);pointer-events:none}
-.story-card.is-on{opacity:1;transform:none;pointer-events:auto}
-.story-card.is-past{opacity:0;transform:translateY(-50px) scale(.95)}
+.story{position:relative;margin-top:28px}
+.story-cards{display:flex;flex-direction:column;gap:28px}
+/* each box sticks under the header and the next one slides up over it, like a stack */
+.story-card{position:sticky;top:calc(84px + var(--n) * 14px);display:grid;grid-template-columns:1fr 1fr;gap:36px;align-items:center;padding:36px;border-radius:28px;min-height:420px;
+  background:var(--surface);border:1px solid var(--line);box-shadow:0 -6px 30px -12px rgba(23,20,28,.12),var(--shadow);
+  transform-origin:50% 0;transition:transform .8s ease,opacity .8s ease}
+.story-card.covered{transform:scale(.96);opacity:.7}
+.story-card.reset *{transition:none!important;animation:none!important}
 .story-text .count{font:500 .82rem var(--mono);color:var(--muted)}
 .story-text h3{font-size:clamp(1.4rem,2.6vw,2rem);letter-spacing:-.02em;line-height:1.1;margin:12px 0}
 .story-text p{color:var(--muted);margin:0;max-width:420px}
-.story-vis{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;border-radius:20px;background:var(--surface-2);padding:20px;overflow:hidden}
-.story-progress{display:flex;gap:8px;justify-content:center}
-.story-progress i{width:28px;height:4px;border-radius:4px;background:var(--line);transition:background .4s,width .4s}
-.story-progress i.on{background:var(--text);width:44px}
+.story-vis{height:100%;min-height:300px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;border-radius:20px;background:var(--surface-2);padding:20px;overflow:hidden}
 /* 01 gates */
 .vis-gates code{font:500 .85rem var(--mono);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 12px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .vis-gates .arrow{color:var(--muted)}
 .gates{display:grid;grid-template-columns:repeat(9,22px);gap:6px}
-.gates i{width:22px;height:22px;border-radius:6px;background:var(--line);transition:background .3s,transform .3s;transition-delay:calc(var(--i) * 45ms)}
+.gates i{width:22px;height:22px;border-radius:6px;background:var(--line);transition:background .5s,transform .5s;transition-delay:calc(var(--i) * 80ms)}
 .is-on .gates i{background:var(--c);transform:scale(1.05)}
 .tag{font:600 .8rem var(--mono);padding:4px 10px;border-radius:999px;background:var(--surface);border:1px solid var(--line)}
 /* 02 paint */
 .paint{position:relative;width:min(100%,300px);aspect-ratio:1;border-radius:14px;overflow:hidden;background:var(--surface)}
 .paint canvas{width:100%;height:100%;display:block;clip-path:inset(0 0 100% 0)}
 .paint .scanbar{position:absolute;left:0;right:0;top:0;height:2px;background:linear-gradient(90deg,var(--pink),var(--gold),var(--teal));box-shadow:0 0 12px var(--pink);opacity:0}
-.is-on .paint canvas{animation:paint 1.8s steps(32) .2s forwards}
-.is-on .paint .scanbar{animation:scanbar 1.8s steps(32) .2s forwards}
+.is-on .paint canvas{animation:paint 3s steps(32) .3s forwards}
+.is-on .paint .scanbar{animation:scanbar 3s steps(32) .3s forwards}
 @keyframes paint{to{clip-path:inset(0 0 0 0)}}
 @keyframes scanbar{0%{opacity:1;top:0}99%{opacity:1;top:100%}100%{opacity:0;top:100%}}
 /* 03 verify */
 .vis-verify{align-items:stretch;justify-content:center;font:500 .88rem var(--mono)}
-.vrow,.vdone{opacity:0;transform:translateX(-12px);transition:opacity .4s,transform .4s;transition-delay:calc(var(--d) * 220ms + 150ms)}
+.vrow,.vdone{opacity:0;transform:translateX(-12px);transition:opacity .6s,transform .6s;transition-delay:calc(var(--d) * 400ms + 300ms)}
 .vrow{display:grid;grid-template-columns:1fr auto 28px;gap:10px;padding:10px 14px;border-radius:10px;background:var(--surface);border:1px solid var(--line)}
 .vrow b{color:var(--teal);text-align:right}
 .vdone{margin-top:6px;text-align:center;color:var(--teal);font-weight:600}
@@ -210,14 +206,12 @@ dt{color:var(--muted)}dd{margin:0;font-family:var(--mono);font-size:.88rem;word-
 .mint-meta{display:flex;justify-content:space-between;padding:8px 4px;font-size:.85rem}.mint-meta span{color:var(--muted)}
 .mint-btn,.mint-ok{display:block;white-space:nowrap;text-align:center;border-radius:999px;padding:8px;font-weight:600;font-size:.88rem}
 .mint-btn{background:var(--primary);color:var(--on-primary)}
-.mint-ok{position:absolute;left:10px;right:10px;bottom:10px;background:var(--teal);color:#fff;opacity:0;transform:scale(.9);transition:opacity .4s 1.1s,transform .4s 1.1s}
-.is-on .mint-btn{animation:press .5s .7s}
+.mint-ok{position:absolute;left:10px;right:10px;bottom:10px;background:var(--teal);color:#fff;opacity:0;transform:scale(.9);transition:opacity .6s 1.9s,transform .6s 1.9s}
+.is-on .mint-btn{animation:press .7s 1.2s}
 .is-on .mint-ok{opacity:1;transform:none}
 @keyframes press{50%{transform:scale(.94)}}
 /* no motion: show the four steps one after another */
-.story.calm{height:auto}.story.calm .story-pin{position:static;height:auto}
-.story.calm .story-cards{height:auto;display:grid;gap:16px}.story.calm .story-card{position:relative;opacity:1;transform:none}
-.story.calm .story-progress{display:none}
+.story.calm .story-card{position:relative;top:auto}
 .story.calm .paint canvas{clip-path:none}
 footer{text-align:center;color:var(--muted);font-size:.85rem;padding:30px 16px;border-top:1px solid var(--line)}
 
@@ -229,9 +223,8 @@ footer{text-align:center;color:var(--muted);font-size:.85rem;padding:30px 16px;b
   .detail,.studio{grid-template-columns:1fr}
   .sticky{position:static}
   .page-section{margin-top:48px;padding-top:40px}
-  .story-pin{top:110px;height:calc(100svh - 110px);gap:14px}
-  .story-cards{height:calc(100svh - 170px);max-height:620px}
-  .story-card{grid-template-columns:1fr;grid-template-rows:auto 1fr;gap:16px;padding:20px;align-items:stretch}
+  .story-card{top:calc(124px + var(--n) * 10px);grid-template-columns:1fr;grid-template-rows:auto auto;gap:16px;padding:22px;align-items:stretch;min-height:0}
+  .story-vis{min-height:260px}
   .story-text h3{margin:8px 0}
   .story-text p{font-size:.92rem}
   .gates{grid-template-columns:repeat(9,18px);gap:5px}.gates i{width:18px;height:18px}

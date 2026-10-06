@@ -11,7 +11,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect width='24' height='24' rx='6' fill='%23141019'/><rect x='5' y='5' width='6' height='6' rx='1.5' fill='%23ff4fa3'/><rect x='13' y='5' width='6' height='6' rx='3' fill='%23f5b841'/><rect x='5' y='13' width='6' height='6' rx='3' fill='%2340d9b8'/><rect x='13' y='13' width='6' height='6' rx='1.5' fill='%23ff4fa3'/></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=7">
+<link rel="stylesheet" href="style.css?v=8">
 </head>
 <body>
 <header class="top">
@@ -140,9 +140,8 @@
       <h2>Logic you can see, check and own.</h2>
     </div>
     <div class="story" id="story">
-      <div class="story-pin">
         <div class="story-cards">
-          <article class="story-card" data-i="0">
+          <article class="story-card" data-i="0" style="--n:0">
             <div class="story-text">
               <span class="count">01 / 04</span>
               <h3>Write a rule. It becomes a circuit.</h3>
@@ -155,7 +154,7 @@
               <span class="tag" id="v-gatecount"></span>
             </div>
           </article>
-          <article class="story-card" data-i="1">
+          <article class="story-card" data-i="1" style="--n:1">
             <div class="story-text">
               <span class="count">02 / 04</span>
               <h3>Every input gets an answer.</h3>
@@ -163,7 +162,7 @@
             </div>
             <div class="story-vis vis-paint"><div class="paint"><canvas id="v-paint" width="540" height="540"></canvas><i class="scanbar"></i></div></div>
           </article>
-          <article class="story-card" data-i="2">
+          <article class="story-card" data-i="2" style="--n:2">
             <div class="story-text">
               <span class="count">03 / 04</span>
               <h3>Anyone can check it.</h3>
@@ -177,7 +176,7 @@
               <div class="vdone" style="--d:4">8 / 8 match on X Layer</div>
             </div>
           </article>
-          <article class="story-card" data-i="3">
+          <article class="story-card" data-i="3" style="--n:3">
             <div class="story-text">
               <span class="count">04 / 04</span>
               <h3>Mint it. It's yours.</h3>
@@ -192,8 +191,6 @@
             </div>
           </article>
         </div>
-        <div class="story-progress" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
-      </div>
     </div>
     <div class="prose">
     <p class="muted small">TapeOut's X Layer contracts are new and not independently audited. Every transaction is shown in your wallet before you sign. Nothing here is investment advice.</p>
@@ -212,6 +209,6 @@
   </section>
 </main>
 <footer>Built on <a href="https://tapeout.net" target="_blank" rel="noopener">TapeOut</a> · X Layer <a id="foot-cpu" target="_blank" rel="noopener"></a></footer>
-<script type="module" src="js/app.js?v=7"></script>
+<script type="module" src="js/app.js?v=8"></script>
 </body>
 </html>
