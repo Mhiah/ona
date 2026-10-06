@@ -2,7 +2,7 @@
 // to launch a processor, mint NAND transistors and tape out a circuit.
 // Selectors, event topics and the factory address follow the shipped TapeOut client, as
 // documented by CircuitDesk (MIT): github.com/diveyreadytodive-star/circuitdesk-ignix-tapeout
-import { CONFIG } from '../config.js?v=10';
+import { CONFIG } from '../config.js?v=11';
 
 export const PLATFORM = Object.freeze({
   chainId: 196, chainIdHex: '0xc4', chainName: 'X Layer',
