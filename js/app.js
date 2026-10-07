@@ -1,7 +1,7 @@
-import { CONFIG } from '../config.js?v=11';
-import { compile, netlistToExprs } from './netlist.js?v=11';
-import { render, truthGrid, hash32 } from './art.js?v=11';
-import * as chain from './chain.js?v=11';
+import { CONFIG } from '../config.js?v=12';
+import { compile, netlistToExprs } from './netlist.js?v=12';
+import { render, truthGrid, hash32 } from './art.js?v=12';
+import * as chain from './chain.js?v=12';
 
 const $ = (id) => document.getElementById(id);
 const short = (a) => `${a.slice(0, 6)}…${a.slice(-4)}`;
@@ -464,6 +464,7 @@ $('s-mint').onclick = async () => {
 };
 
 // ---------- launch (processor owner) ----------
+$('launch-panel').hidden = !!CONFIG.PROCESSOR; // already launched: don't offer a second processor
 $('l-go').onclick = async () => {
   const st = $('l-status');
   try {
