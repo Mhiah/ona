@@ -12,8 +12,6 @@ Every circuit taped out on [TapeOut](https://tapeout.net) is a small program mad
 
 The picture comes only from the circuit's logic. The same circuit always draws the same artwork, and anyone can check it against the chain, so a piece can't be faked or changed.
 
-**Use case:** create and own generative art that anyone can verify. You design a piece in the Studio, mint it on X Layer, and the chain proves the picture really comes from that circuit. Every piece uses the Ọnà processor's transistors, so the processor has a real job.
-
 ## Hackathon requirements
 
 How Ọnà meets each rule of the [TapeOut Genesis Transistor Hackathon](https://ignix.bot/x_campaign):
